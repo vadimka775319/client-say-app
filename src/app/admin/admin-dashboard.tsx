@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  computeBriefPoints,
   economyRules,
   globalReviewStats,
   partnerLabel,
@@ -15,6 +14,12 @@ import {
   type UserProfile,
   userFullName,
 } from "@/lib/mock-data";
+import {
+  computeLandingStats,
+  defaultSiteSettings,
+  SITE_SETTINGS_KEY,
+  type SiteSettings,
+} from "@/lib/site-settings";
 
 export function AdminDashboard() {
   const [partnerList, setPartnerList] = useState<Partner[]>(() =>
@@ -30,8 +35,25 @@ export function AdminDashboard() {
     "u-1": "",
     "u-2": "",
   });
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    if (typeof window === "undefined") return defaultSiteSettings;
+    try {
+      const raw = window.localStorage.getItem(SITE_SETTINGS_KEY);
+      if (!raw) return defaultSiteSettings;
+      const parsed = JSON.parse(raw) as Partial<SiteSettings>;
+      return { ...defaultSiteSettings, ...parsed };
+    } catch {
+      return defaultSiteSettings;
+    }
+  });
 
   const totalPoints = userList.reduce((acc, user) => acc + user.points, 0);
+  const landingStats = computeLandingStats(
+    siteSettings,
+    partnerList.length,
+    userList.length,
+    rewardList.length,
+  );
 
   const trend = useMemo(
     () => [
@@ -46,6 +68,17 @@ export function AdminDashboard() {
     [],
   );
   const maxV = Math.max(...trend.map((t) => t.v), 1);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const payload = {
+      ...siteSettings,
+      computedPartners: landingStats.partners,
+      computedUsers: landingStats.users,
+      computedRewards: landingStats.rewards,
+    };
+    window.localStorage.setItem(SITE_SETTINGS_KEY, JSON.stringify(payload));
+  }, [landingStats.partners, landingStats.rewards, landingStats.users, siteSettings]);
 
   return (
     <>
@@ -75,6 +108,19 @@ export function AdminDashboard() {
           </li>
         </ul>
       </section>
+
+      <SiteSettingsPanel
+        value={siteSettings}
+        onChange={setSiteSettings}
+        stats={{
+          realPartners: partnerList.length,
+          realUsers: userList.length,
+          realRewards: rewardList.length,
+          totalPartners: landingStats.partners,
+          totalUsers: landingStats.users,
+          totalRewards: landingStats.rewards,
+        }}
+      />
 
       <AdminRewardsPanel
         rewards={rewardList}
@@ -185,6 +231,117 @@ export function AdminDashboard() {
         </article>
       </section>
     </>
+  );
+}
+
+function SiteSettingsPanel({
+  value,
+  onChange,
+  stats,
+}: {
+  value: SiteSettings;
+  onChange: (value: SiteSettings) => void;
+  stats: {
+    realPartners: number;
+    realUsers: number;
+    realRewards: number;
+    totalPartners: number;
+    totalUsers: number;
+    totalRewards: number;
+  };
+}) {
+  return (
+    <section className="rounded-2xl border border-sky-200 bg-sky-50/60 p-6 shadow-sm">
+      <h2 className="text-lg font-bold text-slate-900">Настройки сайта: счётчики и контакты в футере</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        Эти значения сразу отражаются на главной странице в этом браузере. Итог считается от базы + текущих данных из
+        админки.
+      </p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="block text-sm">
+          Короткое описание сервиса
+          <input
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            value={value.brandLine}
+            onChange={(e) => onChange({ ...value, brandLine: e.target.value })}
+          />
+        </label>
+        <label className="block text-sm">
+          Телефон (как видно на сайте)
+          <input
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            value={value.phoneDisplay}
+            onChange={(e) => onChange({ ...value, phoneDisplay: e.target.value })}
+          />
+        </label>
+        <label className="block text-sm">
+          Телефон для ссылки tel:
+          <input
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            value={value.phoneTel}
+            onChange={(e) => onChange({ ...value, phoneTel: e.target.value })}
+            placeholder="+79130000000"
+          />
+        </label>
+        <label className="block text-sm">
+          График работы
+          <input
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            value={value.schedule}
+            onChange={(e) => onChange({ ...value, schedule: e.target.value })}
+          />
+        </label>
+        <label className="block text-sm md:col-span-2">
+          Email для сайта
+          <input
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            value={value.emailInfo}
+            onChange={(e) => onChange({ ...value, emailInfo: e.target.value })}
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <label className="block text-sm">
+          База партнёров
+          <input
+            type="number"
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            value={value.basePartners}
+            onChange={(e) => onChange({ ...value, basePartners: Number(e.target.value) || 0 })}
+          />
+        </label>
+        <label className="block text-sm">
+          Пользователей на 1 партнёра
+          <input
+            type="number"
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            value={value.usersPerPartner}
+            onChange={(e) => onChange({ ...value, usersPerPartner: Number(e.target.value) || 0 })}
+          />
+        </label>
+        <label className="block text-sm">
+          База призов
+          <input
+            type="number"
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            value={value.baseRewards}
+            onChange={(e) => onChange({ ...value, baseRewards: Number(e.target.value) || 0 })}
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-xl border border-sky-100 bg-white p-4 text-sm md:grid-cols-2">
+        <p>
+          Реально в демо сейчас: <strong>{stats.realPartners}</strong> партнёров, <strong>{stats.realUsers}</strong>{" "}
+          пользователей, <strong>{stats.realRewards}</strong> призов.
+        </p>
+        <p>
+          На лендинге показываем: <strong>{stats.totalPartners}</strong> партнёров, <strong>{stats.totalUsers}</strong>{" "}
+          пользователей, <strong>{stats.totalRewards}</strong> призов.
+        </p>
+      </div>
+    </section>
   );
 }
 

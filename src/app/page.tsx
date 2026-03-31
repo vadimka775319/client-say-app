@@ -1,6 +1,15 @@
+ "use client";
+
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { partnerPlans, partners, rewards, users } from "@/lib/mock-data";
-import { coverageCities, siteContact } from "@/lib/site-config";
+import { coverageCities } from "@/lib/site-config";
+import {
+  computeLandingStats,
+  defaultSiteSettings,
+  SITE_SETTINGS_KEY,
+  type SiteSettings,
+} from "@/lib/site-settings";
 
 const INDUSTRIES = [
   "Общепит",
@@ -40,6 +49,22 @@ const HOW_STEPS = [
 
 export default function Home() {
   const monthlyPlan = partnerPlans.find((p) => p.id === "monthly");
+  const [siteSettings] = useState<SiteSettings>(() => {
+    if (typeof window === "undefined") return defaultSiteSettings;
+    try {
+      const raw = window.localStorage.getItem(SITE_SETTINGS_KEY);
+      if (!raw) return defaultSiteSettings;
+      const parsed = JSON.parse(raw) as Partial<SiteSettings>;
+      return { ...defaultSiteSettings, ...parsed };
+    } catch {
+      return defaultSiteSettings;
+    }
+  });
+
+  const landingStats = useMemo(
+    () => computeLandingStats(siteSettings, partners.length, users.length, rewards.length),
+    [siteSettings],
+  );
 
   return (
     <div className="min-h-full bg-[var(--background)] text-slate-800">
@@ -158,13 +183,11 @@ export default function Home() {
 
         <section className="border-b border-sky-100/80 bg-white/60 py-6 backdrop-blur-sm">
           <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 md:flex-row md:items-center md:justify-between md:px-8">
-            <p className="text-sm font-medium text-slate-600">
-              Демо-данные в кабинетах: партнёры, пользователи и витрина призов.
-            </p>
+            <p className="text-sm font-medium text-slate-600">Данные обновляются из кабинетов и настроек SuperAdmin.</p>
             <div className="flex flex-wrap gap-6 text-sm">
-              <StatPill label="партнёров" value={String(partners.length)} />
-              <StatPill label="пользователей" value={String(users.length)} />
-              <StatPill label="призов" value={String(rewards.length)} />
+              <StatPill label="зарегистрированных партнёров" value={String(landingStats.partners)} />
+              <StatPill label="пользователей" value={String(landingStats.users)} />
+              <StatPill label="призов в витрине" value={String(landingStats.rewards)} />
             </div>
           </div>
         </section>
@@ -234,7 +257,8 @@ export default function Home() {
               <div className="max-w-lg text-center md:text-left">
                 <h2 className="text-2xl font-extrabold text-slate-900 md:text-3xl">Загляните в кабинеты</h2>
                 <p className="mt-3 text-slate-600">
-                  Партнёр — брифы и QR. Пользователь — профиль, баллы и обмен на призы.
+                  Партнёр управляет брифами, QR, статистикой и призами. Пользователь ведёт профиль, копит баллы и
+                  обменивает их на подарки.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-3">
@@ -469,42 +493,26 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-5 py-12 md:px-8">
             <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4 lg:gap-8">
               <div>
-                <p className="text-sm font-semibold text-slate-200">{siteContact.brandLine}</p>
+                <p className="text-sm font-semibold text-slate-200">{siteSettings.brandLine}</p>
                 <ul className="mt-4 space-y-2 text-sm">
                   <li>
                     <span className="text-slate-500">Тел.: </span>
-                    <span className="text-slate-300">{siteContact.phoneDisplay}</span>
-                    {siteContact.phoneTel ? (
-                      <a href={`tel:${siteContact.phoneTel}`} className="ml-1 text-violet-400 hover:underline">
+                    <span className="text-slate-300">{siteSettings.phoneDisplay}</span>
+                    {siteSettings.phoneTel ? (
+                      <a href={`tel:${siteSettings.phoneTel}`} className="ml-1 text-violet-400 hover:underline">
                         позвонить
                       </a>
                     ) : null}
                   </li>
                   <li>
                     <span className="text-slate-500">Время работы офиса: </span>
-                    <span className="text-slate-300">{siteContact.schedule}</span>
+                    <span className="text-slate-300">{siteSettings.schedule}</span>
                   </li>
                   <li>
                     <span className="text-slate-500">E-mail: </span>
-                    <a href={`mailto:${siteContact.emailInfo}`} className="text-violet-400 hover:underline">
-                      {siteContact.emailInfo}
+                    <a href={`mailto:${siteSettings.emailInfo}`} className="text-violet-400 hover:underline">
+                      {siteSettings.emailInfo}
                     </a>
-                  </li>
-                  <li>
-                    <span className="text-slate-500">Партнёрам: </span>
-                    <a href={`mailto:${siteContact.emailPartners}`} className="text-violet-400 hover:underline">
-                      {siteContact.emailPartners}
-                    </a>
-                  </li>
-                  <li className="pt-1 text-xs text-slate-500">
-                    E-mail ВКонтакте / сообщества:{" "}
-                    {siteContact.emailVk ? (
-                      <a href={`mailto:${siteContact.emailVk}`} className="text-violet-400 hover:underline">
-                        {siteContact.emailVk}
-                      </a>
-                    ) : (
-                      <span className="text-slate-500">добавим позже</span>
-                    )}
                   </li>
                 </ul>
               </div>
@@ -598,8 +606,7 @@ export default function Home() {
             </div>
             <div className="mt-12 border-t border-slate-800 pt-8 text-center text-xs text-slate-500">
               <p>
-                © {new Date().getFullYear()} ClientSay. Все права защищены. Зарегистрированный товарный знак — укажите
-                при наличии.
+                  © 2024-2026 ClientSay. Все права защищены.
               </p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                 <Link href="/privacy" className="hover:text-slate-300">
