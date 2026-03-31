@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  PARTNER
+  SUPER_ADMIN
+}
+
+enum QuestionType {
+  TEXT
+  RATING
+  CHOICE
+}
+
+enum RedemptionStatus {
+  ISSUED
+  REDEEMED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String
+  firstName    String
+  lastName     String   @default("")
+  role         Role
+  points       Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  partner        Partner?
+  briefResponses BriefResponse[]
+  redemptions    Redemption[]
+}
+
+model Partner {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName String
+  locations   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  briefs Brief[]
+}
+
+model Brief {
+  id             String   @id @default(cuid())
+  partnerId      String
+  partner        Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  title          String
+  pointsOverride Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  questions BriefQuestion[]
+  responses BriefResponse[]
+}
+
+model BriefQuestion {
+  id      String       @id @default(cuid())
+  briefId String
+  brief   Brief        @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  type    QuestionType
+  prompt  String
+  options Json?
+  order   Int
+}
+
+/// Последнее прохождение брифа у партнёра (антифрод: не чаще 1 раза в 30 дней на партнёра)
+model BriefResponse {
+  id            String   @id @default(cuid())
+  briefId       String
+  brief         Brief    @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partnerId     String
+  answers       Json
+  pointsAwarded Int
+  createdAt     DateTime @default(now())
+
+  @@index([userId, partnerId])
+}
+
+model Reward {
+  id               String    @id @default(cuid())
+  partnerId        String?
+  fundedByPlatform Boolean   @default(false)
+  title            String
+  description      String    @default("")
+  imageUrl         String    @default("")
+  pointsCost       Int
+  totalStock       Int
+  stockLeft        Int
+  startsAt         DateTime
+  endsAt           DateTime
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  redemptions Redemption[]
+}
+
+model Redemption {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rewardId  String
+  reward    Reward           @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  code      String           @unique
+  status    RedemptionStatus @default(ISSUED)
+  createdAt DateTime         @default(now())
+}
