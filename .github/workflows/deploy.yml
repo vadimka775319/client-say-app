@@ -39,12 +39,14 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          timeout: 60s
           script_stop: true
           # Псевдотерминал: иначе на многих VPS /etc/bash.bashrc выходит сразу и nvm/npm не в PATH
           # (см. Q&A appleboy/ssh-action — «Command not found (npm)»).
           request_pty: true
           script: |
             set -euo pipefail
+            echo "==== DEPLOY_START $(date -u +%H:%M:%SZ) ===="
             export NODE_ENV=production
             APP_DIR="/var/www/client-say-app"
             REPO_URL="https://github.com/vadimka775319/client-say-app.git"
@@ -84,8 +86,16 @@ jobs:
               exit 1
             fi
 
-            mkdir -p "$APP_DIR"
-            cd "$APP_DIR"
+            NPM_PREFIX="$(npm config get prefix 2>/dev/null || true)"
+            if [ -n "$NPM_PREFIX" ] && [ -d "$NPM_PREFIX/bin" ]; then
+              export PATH="$NPM_PREFIX/bin:$PATH"
+            fi
+
+            if ! mkdir -p "$APP_DIR"; then
+              echo "FATAL: нет прав на mkdir $APP_DIR. На VPS один раз: sudo mkdir -p $APP_DIR && sudo chown -R \$(whoami):\$(whoami) $APP_DIR" >&2
+              exit 1
+            fi
+            cd "$APP_DIR" || { echo "FATAL: не удалось cd $APP_DIR" >&2; exit 1; }
 
             if [ ! -d ".git" ]; then
               rm -rf "$APP_DIR"/*
@@ -107,6 +117,9 @@ jobs:
             (
               set -euo pipefail
               export NODE_ENV=production
+              if [ -n "${NPM_PREFIX:-}" ] && [ -d "$NPM_PREFIX/bin" ]; then
+                export PATH="$NPM_PREFIX/bin:$PATH"
+              fi
               export AUTH_SECRET="${AUTH_SECRET:-ci-build-placeholder-secret-min-32-chars!!}"
               export DATABASE_URL="${DATABASE_URL:-postgresql://127.0.0.1:5432/build_placeholder?schema=public}"
               npm ci
