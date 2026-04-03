@@ -48,9 +48,10 @@ if ($LASTEXITCODE -ne 0) {
   Write-Error "scp failed with exit code $LASTEXITCODE"
 }
 
-$remoteOneLine = 'umask 077; mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh" && f="$HOME/.ssh/authorized_keys" && touch "$f" && chmod 600 "$f" && k=$(sed "s/\r$//" /tmp/clientsay_deploy_add.pub | head -1) && rm -f /tmp/clientsay_deploy_add.pub && { test -n "$k" || { echo "empty key line" >&2; exit 1; }; } && if grep -qxF "$k" "$f" 2>/dev/null; then echo "Key already in authorized_keys."; else echo "$k" >> "$f" && echo "Key added."; fi'
+# One argv for ssh.exe: otherwise PowerShell splits on spaces and "$k" breaks on the server ("test: too many arguments").
+$remoteOneLine = 'umask 077; mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh" && f="$HOME/.ssh/authorized_keys" && touch "$f" && chmod 600 "$f" && k=$(tr -d ''\r'' < /tmp/clientsay_deploy_add.pub | head -n 1) && rm -f /tmp/clientsay_deploy_add.pub && if [ -z "$k" ]; then echo "empty key line" >&2; exit 1; fi && if grep -qxF "$k" "$f" 2>/dev/null; then echo "Key already in authorized_keys."; else echo "$k" >> "$f" && echo "Key added."; fi'
 
-& ssh.exe @sshOpts $sshTarget $remoteOneLine
+& ssh.exe @sshOpts $sshTarget "$remoteOneLine"
 if ($LASTEXITCODE -ne 0) {
   Write-Error "ssh failed with exit code $LASTEXITCODE"
 }
