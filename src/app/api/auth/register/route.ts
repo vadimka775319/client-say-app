@@ -107,6 +107,12 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
+    if (code === "P2021" || code === "P2022") {
+      return NextResponse.json(
+        { error: { code: "db_schema_outdated", message: "Сервер обновляется. Повторите регистрацию через 1-2 минуты." } },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: { code: "internal", message: "Ошибка регистрации. Попробуйте снова." } },
       { status: 500 },

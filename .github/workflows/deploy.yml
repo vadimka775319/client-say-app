@@ -178,6 +178,7 @@ jobs:
             export AUTH_SECRET="${AUTH_SECRET:-ci-build-placeholder-secret-min-32-chars!!}"
             export DATABASE_URL="${DATABASE_URL:-postgresql://127.0.0.1:5432/build_placeholder?schema=public}"
             npm ci
+            npx prisma db push
             npm run build
           )
 
