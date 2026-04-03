@@ -8,6 +8,8 @@ on:
 env:
   DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ci_placeholder?schema=public
   AUTH_SECRET: "ci-placeholder-secret-min-32-chars-ok!!"
+  # См. предупреждение GitHub Actions про runtime Node для checkout/setup-node
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   verify:
@@ -17,7 +19,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -53,10 +55,20 @@ jobs:
             if command -v fnm >/dev/null 2>&1; then
               eval "$(fnm env)"
             fi
+            if [ -f "$HOME/.bashrc" ]; then
+              # shellcheck disable=SC1090
+              . "$HOME/.bashrc"
+            fi
             if [ -f "$HOME/.profile" ]; then
               # shellcheck disable=SC1090
               . "$HOME/.profile"
             fi
+
+            echo "=== deploy diagnostics (VPS) ==="
+            echo "USER=$(whoami) HOME=$HOME PATH=$PATH"
+            command -v node >/dev/null && node -v || echo "ERROR: node не в PATH"
+            command -v npm >/dev/null && npm -v || echo "ERROR: npm не в PATH"
+            command -v git >/dev/null && git --version || echo "ERROR: git не в PATH"
 
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
