@@ -101,6 +101,7 @@ function trackEvent(eventName: string, params: Record<string, string | number | 
 export default function Home() {
   const monthlyPlan = partnerPlans.find((p) => p.id === "monthly");
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pricingRef = useRef<HTMLElement | null>(null);
   const pricingViewSent = useRef(false);
 
@@ -172,13 +173,22 @@ export default function Home() {
       </a>
 
       <header className="sticky top-0 z-40 border-b border-sky-100/80 bg-white/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-3 md:px-8">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3 md:px-8">
           <Link href="/" className="flex items-center gap-2 no-underline">
             <span className="bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-2xl font-black tracking-tight text-transparent md:text-3xl">
               ClientSay
             </span>
           </Link>
-          <nav className="flex flex-wrap items-center gap-2 text-sm">
+          <button
+            type="button"
+            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm md:hidden"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-main-menu"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+          >
+            {mobileMenuOpen ? "Закрыть" : "Меню"}
+          </button>
+          <nav className="hidden items-center gap-2 text-sm md:flex">
             <a
               href="#how"
               className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
@@ -235,6 +245,77 @@ export default function Home() {
             </Link>
           </nav>
         </div>
+        {mobileMenuOpen ? (
+          <div id="mobile-main-menu" className="border-t border-sky-100 bg-white px-5 py-4 md:hidden">
+            <nav className="flex flex-col gap-2 text-sm">
+              <a
+                href="#how"
+                className="rounded-xl px-3 py-2 font-medium text-slate-700 hover:bg-sky-50 hover:text-slate-900"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Как работает
+              </a>
+              <a
+                href="#prizes"
+                className="rounded-xl px-3 py-2 font-medium text-slate-700 hover:bg-sky-50 hover:text-slate-900"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Призы
+              </a>
+              <a
+                href="#business"
+                className="rounded-xl px-3 py-2 font-medium text-slate-700 hover:bg-sky-50 hover:text-slate-900"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Для бизнеса
+              </a>
+              <a
+                href="#placement"
+                className="rounded-xl px-3 py-2 font-medium text-slate-700 hover:bg-sky-50 hover:text-slate-900"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Где разместить QR
+              </a>
+              <a
+                href="#pricing"
+                className="rounded-xl px-3 py-2 font-medium text-slate-700 hover:bg-sky-50 hover:text-slate-900"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Тарифы
+              </a>
+              <a
+                href="#materials"
+                className="rounded-xl px-3 py-2 font-medium text-slate-700 hover:bg-sky-50 hover:text-slate-900"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Материалы
+              </a>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Link
+                  href="/partner"
+                  className="rounded-full border border-sky-200 bg-white px-4 py-2 text-center font-semibold text-slate-800 shadow-sm"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Кабинет партнёра
+                </Link>
+                <Link
+                  href="/user"
+                  className="rounded-full border border-transparent px-4 py-2 text-center font-semibold text-violet-700 hover:bg-violet-50"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Личный кабинет
+                </Link>
+                <Link
+                  href="/sign-in"
+                  className="rounded-full bg-slate-900 px-4 py-2 text-center font-semibold text-white shadow-md"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Вход
+                </Link>
+              </div>
+            </nav>
+          </div>
+        ) : null}
       </header>
 
       <main id="main">
