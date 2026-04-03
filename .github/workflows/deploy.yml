@@ -40,35 +40,49 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script_stop: true
+          # Псевдотерминал: иначе на многих VPS /etc/bash.bashrc выходит сразу и nvm/npm не в PATH
+          # (см. Q&A appleboy/ssh-action — «Command not found (npm)»).
+          request_pty: true
           script: |
             set -euo pipefail
             export NODE_ENV=production
             APP_DIR="/var/www/client-say-app"
             REPO_URL="https://github.com/vadimka775319/client-say-app.git"
 
-            # Неинтерактивный SSH часто без nvm/fnm в PATH — подтянуть как при входе по SSH.
+            # Пока грузим профили — отключаем set -e/set -u: любая ошибка в .bashrc не должна ронять деплой.
+            set +eu
             if [ -f "$HOME/.nvm/nvm.sh" ]; then
               # shellcheck disable=SC1090
-              . "$HOME/.nvm/nvm.sh"
+              . "$HOME/.nvm/nvm.sh" || true
               nvm use default 2>/dev/null || true
             fi
             if command -v fnm >/dev/null 2>&1; then
-              eval "$(fnm env)"
+              eval "$(fnm env)" || true
             fi
             if [ -f "$HOME/.bashrc" ]; then
               # shellcheck disable=SC1090
-              . "$HOME/.bashrc"
+              . "$HOME/.bashrc" || true
             fi
             if [ -f "$HOME/.profile" ]; then
               # shellcheck disable=SC1090
-              . "$HOME/.profile"
+              . "$HOME/.profile" || true
             fi
+            set -euo pipefail
 
             echo "=== deploy diagnostics (VPS) ==="
             echo "USER=$(whoami) HOME=$HOME PATH=$PATH"
             command -v node >/dev/null && node -v || echo "ERROR: node не в PATH"
             command -v npm >/dev/null && npm -v || echo "ERROR: npm не в PATH"
             command -v git >/dev/null && git --version || echo "ERROR: git не в PATH"
+
+            if ! command -v npm >/dev/null 2>&1; then
+              echo "FATAL: npm не в PATH после загрузки профилей. Установите Node (например nvm + default) или добавьте его в PATH для пользователя деплоя." >&2
+              exit 1
+            fi
+            if ! command -v git >/dev/null 2>&1; then
+              echo "FATAL: git не установлен на сервере (нужен для git pull)." >&2
+              exit 1
+            fi
 
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
