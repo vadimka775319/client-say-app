@@ -101,7 +101,16 @@ export async function POST(req: Request) {
         { status: 409 },
       );
     }
-    throw e;
+    if (code === "P1001") {
+      return NextResponse.json(
+        { error: { code: "db_unreachable", message: "База данных недоступна. Попробуйте позже." } },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json(
+      { error: { code: "internal", message: "Ошибка регистрации. Попробуйте снова." } },
+      { status: 500 },
+    );
   }
 }
 

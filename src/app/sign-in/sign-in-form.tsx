@@ -57,6 +57,16 @@ export default function SignInForm() {
     [next, router],
   );
 
+  async function readApiResponse<T>(res: Response): Promise<T | null> {
+    const raw = await res.text();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  }
+
   async function logoutHere() {
     setBusy(true);
     setError("");
@@ -92,12 +102,12 @@ export default function SignInForm() {
           ...(roleParam ? { expectedRole: roleParam } : {}),
         }),
       });
-      const data = (await res.json()) as { ok?: boolean; role?: SessionRole; error?: { message?: string } };
+      const data = await readApiResponse<{ ok?: boolean; role?: SessionRole; error?: { message?: string } }>(res);
       if (!res.ok) {
-        setError(data.error?.message ?? "Не удалось войти.");
+        setError(data?.error?.message ?? "Не удалось войти.");
         return;
       }
-      if (data.role) redirectAfterAuth(data.role);
+      if (data?.role) redirectAfterAuth(data.role);
     } catch {
       setError("Сеть недоступна. Попробуйте снова.");
     } finally {
@@ -133,12 +143,12 @@ export default function SignInForm() {
             firstName: name.trim(),
           }),
         });
-        const data = (await res.json()) as { ok?: boolean; role?: SessionRole; error?: { message?: string } };
+        const data = await readApiResponse<{ ok?: boolean; role?: SessionRole; error?: { message?: string } }>(res);
         if (!res.ok) {
-          setError(data.error?.message ?? "Регистрация не удалась.");
+          setError(data?.error?.message ?? "Регистрация не удалась.");
           return;
         }
-        if (data.role) redirectAfterAuth(data.role);
+        if (data?.role) redirectAfterAuth(data.role);
         return;
       }
 
@@ -166,12 +176,12 @@ export default function SignInForm() {
           firstName: name.trim() || "Партнёр",
         }),
       });
-      const data = (await res.json()) as { ok?: boolean; role?: SessionRole; error?: { message?: string } };
+      const data = await readApiResponse<{ ok?: boolean; role?: SessionRole; error?: { message?: string } }>(res);
       if (!res.ok) {
-        setError(data.error?.message ?? "Регистрация не удалась.");
+        setError(data?.error?.message ?? "Регистрация не удалась.");
         return;
       }
-      if (data.role) redirectAfterAuth(data.role);
+      if (data?.role) redirectAfterAuth(data.role);
     } catch {
       setError("Сеть недоступна. Попробуйте снова.");
     } finally {

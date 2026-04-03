@@ -292,9 +292,8 @@ export default function Home() {
         </section>
 
         <section className="border-b border-sky-100/80 bg-white/60 py-6 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 md:flex-row md:items-center md:justify-between md:px-8">
-            <p className="text-sm font-medium text-slate-600">Данные обновляются из кабинетов и настроек SuperAdmin.</p>
-            <div className="flex flex-wrap gap-6 text-sm">
+          <div className="mx-auto flex max-w-6xl justify-center px-5 md:px-8">
+            <div className="flex flex-wrap items-center justify-center gap-8 text-center text-sm md:gap-12">
               <StatPill label="зарегистрированных партнёров" value={String(landingStats.partners)} />
               <StatPill label="пользователей" value={String(landingStats.users)} />
               <StatPill label="призов в витрине" value={String(landingStats.rewards)} />
