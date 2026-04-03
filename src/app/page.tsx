@@ -188,62 +188,66 @@ export default function Home() {
           >
             {mobileMenuOpen ? "Закрыть" : "Меню"}
           </button>
-          <nav className="hidden items-center gap-2 text-sm md:flex">
-            <a
-              href="#how"
-              className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
-            >
-              Как работает
-            </a>
-            <a
-              href="#prizes"
-              className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
-            >
-              Призы
-            </a>
-            <a
-              href="#business"
-              className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
-            >
-              Для бизнеса
-            </a>
-            <a
-              href="#placement"
-              className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
-            >
-              Где разместить QR
-            </a>
-            <a
-              href="#pricing"
-              className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
-            >
-              Тарифы
-            </a>
-            <a
-              href="#materials"
-              className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
-            >
-              Материалы
-            </a>
-            <Link
-              href="/partner"
-              className="rounded-full border border-sky-200 bg-white px-4 py-2 font-semibold text-slate-800 shadow-sm transition-all hover:border-violet-200 hover:shadow-md"
-            >
-              Кабинет партнёра
-            </Link>
-            <Link
-              href="/user"
-              className="rounded-full border border-transparent px-4 py-2 font-semibold text-violet-700 transition-colors hover:bg-violet-50"
-            >
-              Личный кабинет
-            </Link>
-            <Link
-              href="/sign-in"
-              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-slate-800"
-            >
-              Вход
-            </Link>
-          </nav>
+          <div className="hidden items-center gap-6 md:flex">
+            <nav className="flex items-center gap-1 text-sm">
+              <a
+                href="#how"
+                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+              >
+                Как работает
+              </a>
+              <a
+                href="#prizes"
+                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+              >
+                Призы
+              </a>
+              <a
+                href="#business"
+                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+              >
+                Для бизнеса
+              </a>
+              <a
+                href="#placement"
+                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+              >
+                Где разместить QR
+              </a>
+              <a
+                href="#pricing"
+                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+              >
+                Тарифы
+              </a>
+              <a
+                href="#materials"
+                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+              >
+                Материалы
+              </a>
+            </nav>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/partner"
+                className="rounded-full border border-sky-200 bg-white px-4 py-2 font-semibold text-slate-800 shadow-sm transition-all hover:border-violet-200 hover:shadow-md"
+              >
+                Кабинет партнёра
+              </Link>
+              <Link
+                href="/user"
+                className="rounded-full border border-transparent px-4 py-2 font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+              >
+                Личный кабинет
+              </Link>
+              <Link
+                href="/sign-in"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-slate-800"
+              >
+                Вход
+              </Link>
+            </div>
+          </div>
         </div>
         {mobileMenuOpen ? (
           <div id="mobile-main-menu" className="border-t border-sky-100 bg-white px-5 py-4 md:hidden">

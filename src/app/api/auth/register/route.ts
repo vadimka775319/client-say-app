@@ -95,6 +95,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true as const, role: "PARTNER" as const });
   } catch (e: unknown) {
     const code = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
+    const message = e instanceof Error ? e.message : "";
     if (code === "P2002") {
       return NextResponse.json(
         { error: { code: "duplicate", message: "Такой email или телефон уже зарегистрирован" } },
@@ -110,6 +111,12 @@ export async function POST(req: Request) {
     if (code === "P2021" || code === "P2022") {
       return NextResponse.json(
         { error: { code: "db_schema_outdated", message: "Сервер обновляется. Повторите регистрацию через 1-2 минуты." } },
+        { status: 503 },
+      );
+    }
+    if (message.includes("Can't reach database server") || message.includes("Environment variable not found: DATABASE_URL")) {
+      return NextResponse.json(
+        { error: { code: "db_unreachable", message: "База данных недоступна. Проверьте конфигурацию сервера." } },
         { status: 503 },
       );
     }
