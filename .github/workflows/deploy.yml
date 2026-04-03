@@ -8,7 +8,6 @@ on:
 env:
   DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ci_placeholder?schema=public
   AUTH_SECRET: "ci-placeholder-secret-min-32-chars-ok!!"
-  # См. предупреждение GitHub Actions про runtime Node для checkout/setup-node
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -32,109 +31,128 @@ jobs:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
     steps:
-      # Иначе SSH с раннера GitHub часто падает сразу: "Host key verification failed"
-      - name: Add VPS host key to runner known_hosts
+      - name: Prepare SSH key and known_hosts
         run: |
+          set -euo pipefail
+          if [ -z "${VPS_HOST:-}" ] || [ -z "${VPS_USER:-}" ] || [ -z "${SSH_PRIVATE_KEY:-}" ]; then
+            echo "::error::Set repository secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY (full private key, multiline OK)."
+            exit 1
+          fi
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          ssh-keyscan -t rsa,ed25519,ecdsa -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/vps_deploy_key
+          chmod 600 ~/.ssh/vps_deploy_key
+          if ! head -1 ~/.ssh/vps_deploy_key | grep -qE '^-----BEGIN .+PRIVATE KEY'; then
+            echo "::error::VPS_SSH_KEY must be a PEM/OpenSSH private key (line 1: -----BEGIN ... PRIVATE KEY-----)"
+            exit 1
+          fi
+          ssh-keyscan -t rsa,ed25519,ecdsa -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
-      # Секреты репозитория: VPS_HOST, VPS_USER, VPS_SSH_KEY (приватный ключ целиком, не .pub)
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          timeout: 60s
-          script_stop: true
-          # Псевдотерминал: иначе на многих VPS /etc/bash.bashrc выходит сразу и nvm/npm не в PATH
-          # (см. Q&A appleboy/ssh-action — «Command not found (npm)»).
-          request_pty: true
-          script: |
+      - name: Smoke test SSH (key auth)
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/vps_deploy_key \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "${VPS_USER}@${VPS_HOST}" \
+            "echo SSH_OK && whoami && hostname"
+
+      - name: Deploy on VPS
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/vps_deploy_key \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "${VPS_USER}@${VPS_HOST}" \
+            bash -s <<'ENDDEPLOY'
+          set -euo pipefail
+          echo "==== DEPLOY_START $(date -u +%H:%M:%SZ) ===="
+          export NODE_ENV=production
+          APP_DIR="/var/www/client-say-app"
+          REPO_URL="https://github.com/vadimka775319/client-say-app.git"
+
+          set +eu
+          if [ -f "$HOME/.nvm/nvm.sh" ]; then
+            . "$HOME/.nvm/nvm.sh" || true
+            nvm use default 2>/dev/null || true
+          fi
+          if command -v fnm >/dev/null 2>&1; then
+            eval "$(fnm env)" || true
+          fi
+          if [ -f "$HOME/.bashrc" ]; then
+            . "$HOME/.bashrc" || true
+          fi
+          if [ -f "$HOME/.profile" ]; then
+            . "$HOME/.profile" || true
+          fi
+          set -euo pipefail
+
+          echo "=== deploy diagnostics (VPS) ==="
+          echo "USER=$(whoami) HOME=$HOME PATH=$PATH"
+          command -v node >/dev/null && node -v || echo "ERROR: node not in PATH"
+          command -v npm >/dev/null && npm -v || echo "ERROR: npm not in PATH"
+          command -v git >/dev/null && git --version || echo "ERROR: git not in PATH"
+
+          if ! command -v npm >/dev/null 2>&1; then
+            echo "FATAL: npm not in PATH after profile load." >&2
+            exit 1
+          fi
+          if ! command -v git >/dev/null 2>&1; then
+            echo "FATAL: git not installed." >&2
+            exit 1
+          fi
+
+          NPM_PREFIX="$(npm config get prefix 2>/dev/null || true)"
+          if [ -n "$NPM_PREFIX" ] && [ -d "$NPM_PREFIX/bin" ]; then
+            export PATH="$NPM_PREFIX/bin:$PATH"
+          fi
+
+          if ! mkdir -p "$APP_DIR"; then
+            echo "FATAL: cannot mkdir $APP_DIR. On VPS: sudo mkdir -p $APP_DIR && sudo chown -R $(whoami):$(whoami) $APP_DIR" >&2
+            exit 1
+          fi
+          cd "$APP_DIR" || { echo "FATAL: cannot cd $APP_DIR" >&2; exit 1; }
+
+          if [ ! -d ".git" ]; then
+            rm -rf "${APP_DIR:?}/"*
+            git clone "$REPO_URL" "$APP_DIR"
+            cd "$APP_DIR"
+          fi
+
+          git fetch origin main
+          git reset --hard origin/main
+
+          if [ -f .env ]; then
+            set -a
+            . ./.env
+            set +a
+          fi
+
+          (
             set -euo pipefail
-            echo "==== DEPLOY_START $(date -u +%H:%M:%SZ) ===="
             export NODE_ENV=production
-            APP_DIR="/var/www/client-say-app"
-            REPO_URL="https://github.com/vadimka775319/client-say-app.git"
-
-            # Пока грузим профили — отключаем set -e/set -u: любая ошибка в .bashrc не должна ронять деплой.
-            set +eu
-            if [ -f "$HOME/.nvm/nvm.sh" ]; then
-              # shellcheck disable=SC1090
-              . "$HOME/.nvm/nvm.sh" || true
-              nvm use default 2>/dev/null || true
-            fi
-            if command -v fnm >/dev/null 2>&1; then
-              eval "$(fnm env)" || true
-            fi
-            if [ -f "$HOME/.bashrc" ]; then
-              # shellcheck disable=SC1090
-              . "$HOME/.bashrc" || true
-            fi
-            if [ -f "$HOME/.profile" ]; then
-              # shellcheck disable=SC1090
-              . "$HOME/.profile" || true
-            fi
-            set -euo pipefail
-
-            echo "=== deploy diagnostics (VPS) ==="
-            echo "USER=$(whoami) HOME=$HOME PATH=$PATH"
-            command -v node >/dev/null && node -v || echo "ERROR: node не в PATH"
-            command -v npm >/dev/null && npm -v || echo "ERROR: npm не в PATH"
-            command -v git >/dev/null && git --version || echo "ERROR: git не в PATH"
-
-            if ! command -v npm >/dev/null 2>&1; then
-              echo "FATAL: npm не в PATH после загрузки профилей. Установите Node (например nvm + default) или добавьте его в PATH для пользователя деплоя." >&2
-              exit 1
-            fi
-            if ! command -v git >/dev/null 2>&1; then
-              echo "FATAL: git не установлен на сервере (нужен для git pull)." >&2
-              exit 1
-            fi
-
-            NPM_PREFIX="$(npm config get prefix 2>/dev/null || true)"
-            if [ -n "$NPM_PREFIX" ] && [ -d "$NPM_PREFIX/bin" ]; then
+            if [ -n "${NPM_PREFIX:-}" ] && [ -d "$NPM_PREFIX/bin" ]; then
               export PATH="$NPM_PREFIX/bin:$PATH"
             fi
+            export AUTH_SECRET="${AUTH_SECRET:-ci-build-placeholder-secret-min-32-chars!!}"
+            export DATABASE_URL="${DATABASE_URL:-postgresql://127.0.0.1:5432/build_placeholder?schema=public}"
+            npm ci
+            npm run build
+          )
 
-            if ! mkdir -p "$APP_DIR"; then
-              echo "FATAL: нет прав на mkdir $APP_DIR. На VPS один раз: sudo mkdir -p $APP_DIR && sudo chown -R \$(whoami):\$(whoami) $APP_DIR" >&2
-              exit 1
-            fi
-            cd "$APP_DIR" || { echo "FATAL: не удалось cd $APP_DIR" >&2; exit 1; }
+          if ! command -v pm2 >/dev/null 2>&1; then
+            echo "pm2 not found; installing globally..."
+            npm install -g pm2
+          fi
 
-            if [ ! -d ".git" ]; then
-              rm -rf "$APP_DIR"/*
-              git clone "$REPO_URL" "$APP_DIR"
-              cd "$APP_DIR"
-            fi
-
-            git fetch origin main
-            git reset --hard origin/main
-
-            # Секреты и DATABASE_URL с VPS (файл в .gitignore). Нужны для runtime; для сборки ниже — запасные значения.
-            if [ -f .env ]; then
-              set -a
-              # shellcheck disable=SC1091
-              . ./.env
-              set +a
-            fi
-
-            (
-              set -euo pipefail
-              export NODE_ENV=production
-              if [ -n "${NPM_PREFIX:-}" ] && [ -d "$NPM_PREFIX/bin" ]; then
-                export PATH="$NPM_PREFIX/bin:$PATH"
-              fi
-              export AUTH_SECRET="${AUTH_SECRET:-ci-build-placeholder-secret-min-32-chars!!}"
-              export DATABASE_URL="${DATABASE_URL:-postgresql://127.0.0.1:5432/build_placeholder?schema=public}"
-              npm ci
-              npm run build
-            )
-
-            command -v pm2 >/dev/null 2>&1 || { echo "pm2 не найден в PATH. Установите: npm i -g pm2" >&2; exit 1; }
-
-            pm2 restart client-say-app || pm2 start npm --name client-say-app -- start
-            pm2 save
+          pm2 restart client-say-app || pm2 start npm --name client-say-app -- start
+          pm2 save
+          echo "==== DEPLOY_DONE ===="
+          ENDDEPLOY
