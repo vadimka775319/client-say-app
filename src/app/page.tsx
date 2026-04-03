@@ -1,7 +1,8 @@
- "use client";
+"use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DemoQrCard } from "@/app/components/demo-qr-card";
 import { partnerPlans, partners, rewards, users } from "@/lib/mock-data";
 import { coverageCities } from "@/lib/site-config";
 import {
@@ -49,17 +50,45 @@ const HOW_STEPS = [
 
 export default function Home() {
   const monthlyPlan = partnerPlans.find((p) => p.id === "monthly");
-  const [siteSettings] = useState<SiteSettings>(() => {
-    if (typeof window === "undefined") return defaultSiteSettings;
-    try {
-      const raw = window.localStorage.getItem(SITE_SETTINGS_KEY);
-      if (!raw) return defaultSiteSettings;
-      const parsed = JSON.parse(raw) as Partial<SiteSettings>;
-      return { ...defaultSiteSettings, ...parsed };
-    } catch {
-      return defaultSiteSettings;
-    }
-  });
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/site/public", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || cancelled) return;
+        setSiteSettings((s) => ({
+          ...s,
+          brandLine: d.brandLine,
+          emailInfo: d.emailInfo,
+          phoneDisplay: d.phoneDisplay,
+          phoneTel: d.phoneTel,
+          schedule: d.schedule,
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      try {
+        const raw = window.localStorage.getItem(SITE_SETTINGS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as Partial<SiteSettings>;
+        setSiteSettings((prev) => ({
+          ...prev,
+          basePartners: typeof parsed.basePartners === "number" ? parsed.basePartners : prev.basePartners,
+          usersPerPartner: typeof parsed.usersPerPartner === "number" ? parsed.usersPerPartner : prev.usersPerPartner,
+          baseRewards: typeof parsed.baseRewards === "number" ? parsed.baseRewards : prev.baseRewards,
+        }));
+      } catch {
+        /* ignore */
+      }
+    });
+  }, []);
 
   const landingStats = useMemo(
     () => computeLandingStats(siteSettings, partners.length, users.length, rewards.length),
@@ -80,9 +109,6 @@ export default function Home() {
           <Link href="/" className="flex items-center gap-2 no-underline">
             <span className="bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-2xl font-black tracking-tight text-transparent md:text-3xl">
               ClientSay
-            </span>
-            <span className="rounded-full bg-gradient-to-r from-violet-100 to-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700">
-              beta
             </span>
           </Link>
           <nav className="flex flex-wrap items-center gap-2 text-sm">
@@ -133,6 +159,12 @@ export default function Home() {
               className="rounded-full border border-transparent px-4 py-2 font-semibold text-violet-700 transition-colors hover:bg-violet-50"
             >
               Личный кабинет
+            </Link>
+            <Link
+              href="/sign-in"
+              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-slate-800"
+            >
+              Вход
             </Link>
           </nav>
         </div>
@@ -299,8 +331,8 @@ export default function Home() {
                 icon="◇"
               />
               <BenefitCard
-                title="Контроль, лимиты и антифрод"
-                body="Настраиваемые лимиты по тарифу, защита от частых повторных проходов у одного партнёра, управление остатками призов. На подходящих планах — выгрузки для бухгалтерии и отчётов."
+                title="Тарифы под масштаб и прозрачные правила"
+                body="Лимиты брифов и QR под ваш план — без сюрпризов в счёте. Повторные проходы у одной сети регулируются понятными интервалами, остатки призов и сроки акций видны в кабинете. На старших тарифах — выгрузки для отчётности и бухгалтерии."
                 icon="○"
               />
             </div>
@@ -309,11 +341,8 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-slate-900">Быстрее реагировать на негатив</h3>
                 <p className="mt-3 text-sm leading-relaxed text-slate-600">
                   Обратная связь приходит в привычный кабинет: видно время, бриф и все поля. Можно оперативно связаться с
-                  гостем и закрыть вопрос до того, как он уйдёт в публичный негатив — в духе подхода сервисов класса{" "}
-                  <a href="https://qrmap.ru/#instruction" className="font-medium text-violet-700 underline" target="_blank" rel="noreferrer">
-                    QRmap
-                  </a>
-                  , где скорость реакции — часть продукта.
+                  гостем и закрыть вопрос до того, как он уйдёт в публичный негатив — скорость реакции становится частью
+                  вашего сервиса.
                 </p>
               </article>
               <article className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/40 to-white p-8">
@@ -365,11 +394,8 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-5 md:px-8">
             <h2 className="text-center text-3xl font-extrabold text-slate-900 md:text-4xl">Где разместить QR-код</h2>
             <p className="mx-auto mt-3 max-w-3xl text-center text-slate-600">
-              Возьмите за образец типичные точки контакта — как в практике лидеров рынка вроде{" "}
-              <a href="https://qrmap.ru/#instruction" className="text-violet-700 underline" target="_blank" rel="noreferrer">
-                QRmap
-              </a>
-              : от ресепшена до чека и упаковки.
+              Типичные точки контакта — от ресепшена и стола до чека, упаковки и зоны ожидания: там, где гость уже
+              взаимодействует с брендом.
             </p>
             <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[
@@ -489,32 +515,35 @@ export default function Home() {
           </div>
         </section>
 
-        <footer className="border-t border-slate-800 bg-slate-950 text-slate-400">
+        <footer className="border-t border-slate-800 bg-gradient-to-b from-slate-950 to-black text-slate-400">
           <div className="mx-auto max-w-6xl px-5 py-12 md:px-8">
             <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4 lg:gap-8">
-              <div>
-                <p className="text-sm font-semibold text-slate-200">{siteSettings.brandLine}</p>
-                <ul className="mt-4 space-y-2 text-sm">
-                  <li>
-                    <span className="text-slate-500">Тел.: </span>
-                    <span className="text-slate-300">{siteSettings.phoneDisplay}</span>
-                    {siteSettings.phoneTel ? (
-                      <a href={`tel:${siteSettings.phoneTel}`} className="ml-1 text-violet-400 hover:underline">
-                        позвонить
-                      </a>
-                    ) : null}
-                  </li>
-                  <li>
-                    <span className="text-slate-500">Время работы офиса: </span>
-                    <span className="text-slate-300">{siteSettings.schedule}</span>
-                  </li>
-                  <li>
-                    <span className="text-slate-500">E-mail: </span>
-                    <a href={`mailto:${siteSettings.emailInfo}`} className="text-violet-400 hover:underline">
-                      {siteSettings.emailInfo}
+              <div className="lg:col-span-1">
+                <p className="text-xs font-bold uppercase tracking-widest text-violet-400/90">Связь с нами</p>
+                <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-300">{siteSettings.brandLine}</p>
+                <div className="mt-6 rounded-2xl border border-slate-800/80 bg-slate-900/50 p-5">
+                  {siteSettings.phoneTel ? (
+                    <a
+                      href={`tel:${siteSettings.phoneTel}`}
+                      className="block whitespace-nowrap text-xl font-bold tabular-nums tracking-tight text-white transition-colors hover:text-violet-300 sm:text-2xl md:text-3xl"
+                    >
+                      {siteSettings.phoneDisplay}
                     </a>
-                  </li>
-                </ul>
+                  ) : (
+                    <p className="whitespace-nowrap text-xl font-bold tabular-nums text-white sm:text-2xl md:text-3xl">
+                      {siteSettings.phoneDisplay}
+                    </p>
+                  )}
+                  <p className="mt-2 text-sm text-slate-500">{siteSettings.schedule}</p>
+                  <div className="mt-4 h-px w-full bg-slate-800" />
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">E-mail</p>
+                  <a
+                    href={`mailto:${siteSettings.emailInfo}`}
+                    className="mt-1 inline-block text-base font-semibold text-violet-400 transition-colors hover:text-violet-300"
+                  >
+                    {siteSettings.emailInfo}
+                  </a>
+                </div>
               </div>
               <div id="sitemap">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Карта сайта</p>
@@ -595,13 +624,6 @@ export default function Home() {
                   {coverageCities.slice(0, 12).join(" · ")}
                   <span className="text-slate-600"> · …</span>
                 </p>
-                <p className="mt-4 text-xs text-slate-600">
-                  Вдохновлено структурой сервисов с широкой географией, вроде{" "}
-                  <a href="https://qrmap.ru/#instruction" className="text-violet-400 hover:underline" target="_blank" rel="noreferrer">
-                    QRmap
-                  </a>
-                  .
-                </p>
               </div>
             </div>
             <div className="mt-12 border-t border-slate-800 pt-8 text-center text-xs text-slate-500">
@@ -645,41 +667,5 @@ function BenefitCard({ title, body, icon }: { title: string; body: string; icon:
       <h3 className="mt-4 text-xl font-bold text-slate-900">{title}</h3>
       <p className="mt-3 text-sm leading-relaxed text-slate-600">{body}</p>
     </article>
-  );
-}
-
-function DemoQrCard() {
-  return (
-    <div className="rounded-3xl border border-white/90 bg-white/90 p-6 shadow-xl backdrop-blur-md transition-transform duration-500 hover:scale-[1.02]">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Точка контакта</span>
-        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-          бонус за бриф
-        </span>
-      </div>
-      <div className="mt-4 flex justify-center">
-        <div
-          className="relative flex h-40 w-40 items-center justify-center rounded-2xl border-2 border-slate-200 bg-white shadow-inner"
-          aria-hidden
-        >
-          <svg viewBox="0 0 100 100" className="h-28 w-28 text-slate-900" fill="currentColor">
-            <rect x="10" y="10" width="25" height="25" rx="2" />
-            <rect x="65" y="10" width="25" height="25" rx="2" />
-            <rect x="10" y="65" width="25" height="25" rx="2" />
-            <rect x="40" y="40" width="8" height="8" rx="1" />
-            <rect x="52" y="40" width="8" height="8" rx="1" />
-            <rect x="40" y="52" width="8" height="8" rx="1" />
-            <rect x="64" y="52" width="8" height="8" rx="1" />
-            <rect x="76" y="52" width="8" height="8" rx="1" />
-            <rect x="40" y="64" width="8" height="8" rx="1" />
-            <rect x="55" y="64" width="20" height="8" rx="1" />
-            <rect x="40" y="76" width="8" height="8" rx="1" />
-            <rect x="55" y="76" width="8" height="8" rx="1" />
-            <rect x="70" y="76" width="8" height="8" rx="1" />
-          </svg>
-        </div>
-      </div>
-      <p className="mt-4 text-center text-xs text-slate-500">В продукте — ваш QR из кабинета партнёра</p>
-    </div>
   );
 }

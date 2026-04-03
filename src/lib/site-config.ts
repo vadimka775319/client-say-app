@@ -1,7 +1,7 @@
 /** Контакты и материалы — подставьте свои реквизиты. */
 export const siteContact = {
-  phoneDisplay: "+7 (___) ___-__-__",
-  phoneTel: "",
+  phoneDisplay: "89526230351",
+  phoneTel: "+79526230351",
   schedule: "пн–пт, 10:00–17:00 (МСК)",
   emailInfo: "info@clientsay.ru",
   emailPartners: "partner@clientsay.ru",
@@ -33,3 +33,9 @@ export const coverageCities = [
   "Ижевск",
   "Барнаул",
 ];
+
+/** Города в выпадающем списке при регистрации партнёра (можно расширять). */
+export const partnerRegistrationCities = coverageCities;
+
+/** Значение select «указать вручную». */
+export const PARTNER_CITY_OTHER = "__other__";

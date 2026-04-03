@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   economyRules,
@@ -41,11 +42,37 @@ export function AdminDashboard() {
       const raw = window.localStorage.getItem(SITE_SETTINGS_KEY);
       if (!raw) return defaultSiteSettings;
       const parsed = JSON.parse(raw) as Partial<SiteSettings>;
-      return { ...defaultSiteSettings, ...parsed };
+      return {
+        ...defaultSiteSettings,
+        basePartners: typeof parsed.basePartners === "number" ? parsed.basePartners : defaultSiteSettings.basePartners,
+        usersPerPartner:
+          typeof parsed.usersPerPartner === "number" ? parsed.usersPerPartner : defaultSiteSettings.usersPerPartner,
+        baseRewards: typeof parsed.baseRewards === "number" ? parsed.baseRewards : defaultSiteSettings.baseRewards,
+      };
     } catch {
       return defaultSiteSettings;
     }
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/site/public", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || cancelled) return;
+        setSiteSettings((s) => ({
+          ...s,
+          brandLine: d.brandLine,
+          emailInfo: d.emailInfo,
+          phoneDisplay: d.phoneDisplay,
+          phoneTel: d.phoneTel,
+          schedule: d.schedule,
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const totalPoints = userList.reduce((acc, user) => acc + user.points, 0);
   const landingStats = computeLandingStats(
@@ -72,13 +99,12 @@ export function AdminDashboard() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const payload = {
-      ...siteSettings,
-      computedPartners: landingStats.partners,
-      computedUsers: landingStats.users,
-      computedRewards: landingStats.rewards,
+      basePartners: siteSettings.basePartners,
+      usersPerPartner: siteSettings.usersPerPartner,
+      baseRewards: siteSettings.baseRewards,
     };
     window.localStorage.setItem(SITE_SETTINGS_KEY, JSON.stringify(payload));
-  }, [landingStats.partners, landingStats.rewards, landingStats.users, siteSettings]);
+  }, [siteSettings.basePartners, siteSettings.usersPerPartner, siteSettings.baseRewards]);
 
   return (
     <>
@@ -250,12 +276,49 @@ function SiteSettingsPanel({
     totalRewards: number;
   };
 }) {
+  const router = useRouter();
+  const [savingPublic, setSavingPublic] = useState(false);
+  const [publicMsg, setPublicMsg] = useState<string | null>(null);
+
+  async function savePublicContacts() {
+    setSavingPublic(true);
+    setPublicMsg(null);
+    try {
+      const r = await fetch("/api/site/public", {
+        method: "PATCH",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandLine: value.brandLine,
+          emailInfo: value.emailInfo,
+          phoneDisplay: value.phoneDisplay,
+          phoneTel: value.phoneTel,
+          schedule: value.schedule,
+        }),
+      });
+      if (r.status === 403) {
+        setPublicMsg("Нужна сессия супер-админа. Обновите страницу и войдите снова.");
+        return;
+      }
+      if (!r.ok) {
+        setPublicMsg("Не удалось сохранить. Проверьте поля и попробуйте снова.");
+        return;
+      }
+      setPublicMsg("Готово: телефон, почта и слоган обновлены на сайте для всех посетителей.");
+      router.refresh();
+    } catch {
+      setPublicMsg("Ошибка сети.");
+    } finally {
+      setSavingPublic(false);
+    }
+  }
+
   return (
     <section className="rounded-2xl border border-sky-200 bg-sky-50/60 p-6 shadow-sm">
       <h2 className="text-lg font-bold text-slate-900">Настройки сайта: счётчики и контакты в футере</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Эти значения сразу отражаются на главной странице в этом браузере. Итог считается от базы + текущих данных из
-        админки.
+        <strong>Контакты и слоган</strong> хранятся в базе: после правки нажмите «Сохранить на сайт».{" "}
+        <strong>Счётчики</strong> на лендинге — демо: база + данные из этой админки, сохраняются в браузере.
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="block text-sm">
@@ -301,7 +364,19 @@ function SiteSettingsPanel({
         </label>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={savingPublic}
+          onClick={savePublicContacts}
+          className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-opacity hover:bg-slate-800 disabled:opacity-60"
+        >
+          {savingPublic ? "Сохранение…" : "Сохранить контакты на сайт"}
+        </button>
+        {publicMsg ? <p className="text-sm text-slate-700">{publicMsg}</p> : null}
+      </div>
+
+      <div className="mt-6 grid gap-3 md:grid-cols-3">
         <label className="block text-sm">
           База партнёров
           <input

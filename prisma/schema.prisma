@@ -47,6 +47,7 @@ model Partner {
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName String
+  city        String   @default("")
   locations   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -119,4 +120,15 @@ model Redemption {
   code      String           @unique
   status    RedemptionStatus @default(ISSUED)
   createdAt DateTime         @default(now())
+}
+
+/// Публичные контакты и слоган для лендинга (редактирует супер-админ). Одна строка id = "default".
+model SitePublicConfig {
+  id           String   @id @default("default")
+  brandLine    String   @default("Сервис обратной связи с использованием QR-кодов")
+  emailInfo    String   @default("info@clientsay.ru")
+  phoneDisplay String   @default("89526230351")
+  phoneTel     String   @default("+79526230351")
+  schedule     String   @default("пн-пт 10:00-17:00 МСК")
+  updatedAt    DateTime @updatedAt
 }

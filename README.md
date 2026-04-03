@@ -26,14 +26,55 @@
 
 ```bash
 npm install
+```
+
+Создайте `.env` (иначе Prisma выдаст `P1012 Environment variable not found: DATABASE_URL`):
+
+```bash
+npm run env:init
+```
+
+Либо в PowerShell: `Copy-Item .env.example .env`
+
+Отредактируйте `.env`: укажите рабочий `DATABASE_URL` к PostgreSQL и в продакшене — длинный `AUTH_SECRET` (≥32 символов).
+
+Поднимите PostgreSQL и примените схему + демо-пользователей.
+
+**Вариант A — Docker** (если установлен Docker Desktop):
+
+```bash
+npm run db:docker
+npm run db:push
+npm run db:seed
+```
+
+После обновления схемы (новые таблицы в `prisma/schema.prisma`) снова выполните `npm run db:push` и при необходимости `npm run db:seed` — в том числе для строки публичных контактов `SitePublicConfig` (футер на главной).
+
+**Вариант B — свой Postgres на Windows:** создайте БД `client_say`, пользователя и пароль как в `.env`, затем:
+
+```bash
+npm run db:push
+npm run db:seed
+```
+
+Если видите `P1001` / `Can't reach database server` — сервер не запущен или неверный `DATABASE_URL` в `.env`. Остановить контейнер: `npm run db:docker:down`.
+
+```bash
 npm run dev
 ```
 
-Откройте `http://localhost:3000`.
+Откройте `http://localhost:3000`. Кабинеты `/admin`, `/partner`, `/user` доступны только после входа: при переходе откроется `/sign-in` с проверкой роли на уровне middleware и httpOnly-сессии (JWT).
+
+Демо-логины после сида совпадают с подсказками в `src/lib/mock-data.ts` (`owner@…`, `partner@…`, `user@…`).
 
 ## Структура
 
 - `src/app/page.tsx` — главная (продуктовый каркас)
+- `src/app/sign-in/` — общий экран входа и регистрации (партнёр/пользователь)
+- `src/app/api/auth/` — вход, выход, регистрация в БД + httpOnly JWT
+- `src/app/components/cabinet-shell.tsx` — общая шапка кабинетов (навигация, выход)
+- `src/proxy.ts` — защита кабинетов по роли до отдачи страницы (Next.js 16: бывший `middleware`)
+- `.github/workflows/deploy.yml` — CI (lint, typecheck, build), затем деплой на VPS по push в `main`
 - `src/app/admin/page.tsx` — супер-админ
 - `src/app/partner/page.tsx` — партнер
 - `src/app/user/page.tsx` — пользователь
@@ -42,8 +83,8 @@ npm run dev
 
 ## Следующий этап (чтобы стать production-ready)
 
-- Подключить БД (PostgreSQL + Prisma)
-- Добавить auth/roles (JWT + RBAC)
+- Перенести продуктовые сущности с `mock-data` на Prisma и единый API
+- Усилить auth (восстановление пароля, аудит сессий, политика cookie в API)
 - Реальные API для:
   - сканирования QR,
   - отправки брифа,

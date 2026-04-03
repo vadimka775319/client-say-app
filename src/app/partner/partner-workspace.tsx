@@ -12,43 +12,65 @@ type BriefItem = {
   qrCode: string;
 };
 
+function readPartnerStorage(): {
+  companyName: string;
+  locations: number;
+  briefs: BriefItem[];
+  registeredUsers: number;
+} {
+  if (typeof window === "undefined") {
+    return { companyName: "", locations: 0, briefs: [], registeredUsers: 0 };
+  }
+
+  let companyName = "";
+  let locations = 0;
+  let briefs: BriefItem[] = [];
+  let registeredUsers = 0;
+
+  try {
+    const rawProfile = localStorage.getItem("clientsay_partner_profile");
+    if (rawProfile) {
+      const p = JSON.parse(rawProfile) as { companyName?: string; locations?: number };
+      companyName = p.companyName ?? "";
+      locations = p.locations ?? 0;
+    }
+  } catch {
+    // no-op
+  }
+
+  try {
+    const rawBriefs = localStorage.getItem("clientsay_partner_briefs");
+    if (rawBriefs) {
+      const saved = JSON.parse(rawBriefs) as BriefItem[];
+      if (Array.isArray(saved)) briefs = saved;
+    }
+  } catch {
+    // no-op
+  }
+
+  try {
+    const userAccountsRaw = localStorage.getItem("clientsay_accounts_user");
+    const userAccounts = userAccountsRaw ? (JSON.parse(userAccountsRaw) as unknown[]) : [];
+    registeredUsers = Array.isArray(userAccounts) ? userAccounts.length : 0;
+  } catch {
+    registeredUsers = 0;
+  }
+
+  return { companyName, locations, briefs, registeredUsers };
+}
+
 export function PartnerWorkspace() {
-  const [companyName, setCompanyName] = useState("");
-  const [locations, setLocations] = useState(0);
-  const [registeredUsers, setRegisteredUsers] = useState(0);
+  const [initialData] = useState(readPartnerStorage);
+  const [companyName, setCompanyName] = useState(initialData.companyName);
+  const [locations, setLocations] = useState(initialData.locations);
+  const [registeredUsers] = useState(initialData.registeredUsers);
   const [briefTitle, setBriefTitle] = useState("");
   const [manualPoints, setManualPoints] = useState(0);
   const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[]>([
     { id: "q-1", type: "text", prompt: "", options: "" },
   ]);
-  const [briefs, setBriefs] = useState<BriefItem[]>([]);
+  const [briefs, setBriefs] = useState<BriefItem[]>(initialData.briefs);
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    try {
-      const rawProfile = localStorage.getItem("clientsay_partner_profile");
-      if (rawProfile) {
-        const p = JSON.parse(rawProfile) as { companyName?: string; locations?: number };
-        setCompanyName(p.companyName ?? "");
-        setLocations(p.locations ?? 0);
-      }
-      const rawBriefs = localStorage.getItem("clientsay_partner_briefs");
-      if (rawBriefs) {
-        const saved = JSON.parse(rawBriefs) as BriefItem[];
-        if (Array.isArray(saved)) setBriefs(saved);
-      }
-    } catch {
-      // no-op
-    }
-
-    try {
-      const userAccountsRaw = localStorage.getItem("clientsay_accounts_user");
-      const userAccounts = userAccountsRaw ? (JSON.parse(userAccountsRaw) as unknown[]) : [];
-      setRegisteredUsers(Array.isArray(userAccounts) ? userAccounts.length : 0);
-    } catch {
-      setRegisteredUsers(0);
-    }
-  }, []);
 
   useEffect(() => {
     localStorage.setItem(

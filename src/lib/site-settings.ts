@@ -12,8 +12,8 @@ export type SiteSettings = {
 export const SITE_SETTINGS_KEY = "clientsay.site.settings.v1";
 
 export const defaultSiteSettings: SiteSettings = {
-  phoneDisplay: "8 (913) 516-90-73",
-  phoneTel: "+79135169073",
+  phoneDisplay: "89526230351",
+  phoneTel: "+79526230351",
   schedule: "пн-пт 10:00-17:00 МСК",
   emailInfo: "info@clientsay.ru",
   brandLine: "Сервис обратной связи с использованием QR-кодов",

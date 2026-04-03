@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import {
   briefs,
   computeBriefPoints,
@@ -19,40 +19,58 @@ function makeRedemptionCode(rewardId: string) {
   return `CS-${part}-${rnd}`;
 }
 
+function readStoredUserProfile(base: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  points: number;
+}) {
+  if (typeof window === "undefined") return base;
+  try {
+    const raw = localStorage.getItem("clientsay_user_profile");
+    if (!raw) return base;
+    const p = JSON.parse(raw) as {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      phone?: string;
+      points?: number;
+    };
+    return {
+      firstName: p.firstName ?? base.firstName,
+      lastName: p.lastName ?? base.lastName,
+      email: p.email ?? base.email,
+      phone: p.phone ?? base.phone,
+      points: typeof p.points === "number" ? p.points : base.points,
+    };
+  } catch {
+    return base;
+  }
+}
+
 export function UserCabinet() {
   const [user] = useState(users[0]);
-  const [firstName, setFirstName] = useState(user.firstName);
-  const [lastName, setLastName] = useState(user.lastName);
-  const [email, setEmail] = useState(user.email);
-  const [phone, setPhone] = useState(user.phone);
-  const [points, setPoints] = useState(user.points);
+  const [initialProfile] = useState(() =>
+    readStoredUserProfile({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      phone: user.phone,
+      points: user.points,
+    }),
+  );
+  const [firstName, setFirstName] = useState(initialProfile.firstName);
+  const [lastName, setLastName] = useState(initialProfile.lastName);
+  const [email, setEmail] = useState(initialProfile.email);
+  const [phone, setPhone] = useState(initialProfile.phone);
+  const [points, setPoints] = useState(initialProfile.points);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [redeemOpen, setRedeemOpen] = useState<Reward | null>(null);
   const [issuedCode, setIssuedCode] = useState<string | null>(null);
 
   const sortedRewards = useMemo(() => {
     return [...allRewards].sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime());
-  }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("clientsay_user_profile");
-      if (!raw) return;
-      const p = JSON.parse(raw) as {
-        firstName?: string;
-        lastName?: string;
-        email?: string;
-        phone?: string;
-        points?: number;
-      };
-      if (p.firstName) setFirstName(p.firstName);
-      if (p.lastName) setLastName(p.lastName);
-      if (p.email) setEmail(p.email);
-      if (p.phone) setPhone(p.phone);
-      if (typeof p.points === "number") setPoints(p.points);
-    } catch {
-      // no-op
-    }
   }, []);
 
   function saveProfile() {
@@ -89,8 +107,8 @@ export function UserCabinet() {
   return (
     <>
       <section className="rounded-2xl border border-sky-100 bg-gradient-to-br from-white to-sky-50/40 p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">Личный кабинет</p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900 md:text-3xl">ClientSay — пользователь</h1>
+        <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">Ваш аккаунт</p>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900 md:text-3xl">Баллы, профиль и призы</h1>
         <p className="mt-2 text-sm text-slate-600">
           Заполните профиль, копите баллы за брифы и обменивайте на призы. Чтобы получить подарок в точке, покажите{" "}
           <strong>код подтверждения</strong> сотруднику — одних баллов на экране недостаточно.
