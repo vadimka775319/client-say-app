@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DemoQrCard } from "@/app/components/demo-qr-card";
 import { partnerPlans, partners, rewards, users } from "@/lib/mock-data";
 import { coverageCities } from "@/lib/site-config";
@@ -48,9 +48,61 @@ const HOW_STEPS = [
   },
 ];
 
+const TRUST_SIGNALS = [
+  "Запуск за 1 рабочий день",
+  "Без обязательной публикации отзывов на картах",
+  "Прозрачные тарифы без скрытых платежей",
+];
+
+const QUICK_START = [
+  {
+    title: "Быстрый запуск без интеграций",
+    text: "Создаёте бриф, печатаете QR и запускаете сбор обратной связи без сложной технической настройки.",
+  },
+  {
+    title: "Готовые сценарии для точек",
+    text: "Ресепшен, стол, чек, доставка — выбираете подходящие места размещения и получаете стабильный поток ответов.",
+  },
+  {
+    title: "Поддержка в первые недели",
+    text: "Помогаем адаптировать вопросы, механику баллов и витрину призов, чтобы быстрее получить измеримый эффект.",
+  },
+];
+
+const CASE_STUDIES = [
+  {
+    title: "Сеть кофеен (8 точек)",
+    before: "Отзывы собирались нерегулярно, персонал видел только общие жалобы без деталей по сменам.",
+    after: "За 6 недель выросла доля завершённых брифов, а негативные сигналы начали обрабатываться в день обращения.",
+    result: "+34% завершённых анкет, среднее время реакции на негатив: < 2 часов.",
+  },
+  {
+    title: "Стоматология (3 филиала)",
+    before: "Пациенты редко оставляли обратную связь после визита, трудно было понять причины отказа от повторного приёма.",
+    after: "После размещения QR в зоне оплаты клиника получила стабильный поток структурированных ответов по врачам и сервису.",
+    result: "+27% повторных записей у пациентов, оценка сервиса выросла с 4.2 до 4.6.",
+  },
+];
+
+function trackEvent(eventName: string, params: Record<string, string | number | boolean> = {}) {
+  if (typeof window === "undefined") return;
+  const w = window as Window & {
+    gtag?: (...args: unknown[]) => void;
+    dataLayer?: Array<Record<string, unknown>>;
+  };
+  if (typeof w.gtag === "function") {
+    w.gtag("event", eventName, params);
+  }
+  if (Array.isArray(w.dataLayer)) {
+    w.dataLayer.push({ event: eventName, ...params });
+  }
+}
+
 export default function Home() {
   const monthlyPlan = partnerPlans.find((p) => p.id === "monthly");
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
+  const pricingRef = useRef<HTMLElement | null>(null);
+  const pricingViewSent = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +146,21 @@ export default function Home() {
     () => computeLandingStats(siteSettings, partners.length, users.length, rewards.length),
     [siteSettings],
   );
+
+  useEffect(() => {
+    if (!pricingRef.current || pricingViewSent.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const inView = entries.some((entry) => entry.isIntersecting);
+        if (!inView || pricingViewSent.current) return;
+        pricingViewSent.current = true;
+        trackEvent("pricing_view", { section: "pricing" });
+      },
+      { threshold: 0.35 },
+    );
+    observer.observe(pricingRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="min-h-full bg-[var(--background)] text-slate-800">
@@ -194,10 +261,11 @@ export default function Home() {
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <a
-                  href="#how"
+                  href="#cta"
+                  onClick={() => trackEvent("hero_cta_click", { placement: "hero", target: "cta_section" })}
                   className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-lg transition-transform hover:-translate-y-0.5"
                 >
-                  Как это работает
+                  Получить демо и расчёт
                 </a>
                 <a
                   href="#pricing"
@@ -205,6 +273,16 @@ export default function Home() {
                 >
                   От {monthlyPlan?.priceRub ?? 1090} ₽ / месяц
                 </a>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {TRUST_SIGNALS.map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-sky-100 bg-white/80 px-3 py-1 text-xs font-semibold text-slate-600"
+                  >
+                    {item}
+                  </span>
+                ))}
               </div>
             </div>
             <div className="mt-10 md:mt-0 md:max-w-sm md:flex-shrink-0">
@@ -371,6 +449,51 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="border-b border-sky-100/60 bg-white py-16 md:py-24">
+          <div className="mx-auto max-w-6xl px-5 md:px-8">
+            <h2 className="text-center text-3xl font-extrabold text-slate-900 md:text-4xl">
+              Что помогает продавать лучше уже в первый месяц
+            </h2>
+            <p className="mx-auto mt-3 max-w-3xl text-center text-slate-600">
+              Не только сбор отзывов, но и управляемая воронка обратной связи: больше завершённых ответов, быстрее реакция
+              на негатив, понятная аналитика по каждому филиалу.
+            </p>
+            <div className="mt-10 grid gap-6 md:grid-cols-3">
+              {QUICK_START.map((item) => (
+                <article key={item.title} className="rounded-2xl border border-sky-100 bg-sky-50/30 p-6">
+                  <h3 className="text-lg font-bold text-slate-900">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.text}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="cases" className="scroll-mt-20 border-b border-violet-100/40 bg-gradient-to-b from-violet-50/30 to-white py-16 md:py-24">
+          <div className="mx-auto max-w-6xl px-5 md:px-8">
+            <h2 className="text-center text-3xl font-extrabold text-slate-900 md:text-4xl">Кейсы: до / после внедрения</h2>
+            <p className="mx-auto mt-3 max-w-3xl text-center text-slate-600">
+              Примеры сценариев, где структурированная QR-обратная связь помогла улучшить сервис и повторные продажи.
+            </p>
+            <div className="mt-10 grid gap-6 md:grid-cols-2">
+              {CASE_STUDIES.map((item) => (
+                <article key={item.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-xl font-bold text-slate-900">{item.title}</h3>
+                  <div className="mt-4 rounded-xl border border-rose-100 bg-rose-50/50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-rose-700">До</p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-700">{item.before}</p>
+                  </div>
+                  <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">После</p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-700">{item.after}</p>
+                  </div>
+                  <p className="mt-4 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white">{item.result}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section id="industries" className="scroll-mt-20 border-b border-sky-100/60 bg-white py-16 md:py-20">
           <div className="mx-auto max-w-6xl px-5 md:px-8">
             <h2 className="text-center text-2xl font-extrabold text-slate-900 md:text-3xl">Кому подойдёт</h2>
@@ -471,7 +594,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="pricing" className="scroll-mt-20 bg-gradient-to-b from-white to-sky-50/30 py-16 md:py-24">
+        <section id="pricing" ref={pricingRef} className="scroll-mt-20 bg-gradient-to-b from-white to-sky-50/30 py-16 md:py-24">
           <div className="mx-auto max-w-6xl px-5 md:px-8">
             <h2 className="text-center text-3xl font-extrabold text-slate-900 md:text-4xl">Тарифы</h2>
             <p className="mx-auto mt-3 max-w-xl text-center text-slate-600">
@@ -511,6 +634,32 @@ export default function Home() {
                   </ul>
                 </article>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="cta" className="scroll-mt-20 border-t border-sky-100/60 bg-white py-14 md:py-16">
+          <div className="mx-auto max-w-4xl px-5 text-center md:px-8">
+            <h2 className="text-3xl font-extrabold text-slate-900 md:text-4xl">Готовы протестировать на своей точке?</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-slate-600">
+              Поможем подобрать сценарий под ваш бизнес, рассчитать экономику баллов и запустить пилот без лишней
+              бюрократии.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+              <a
+                href={`tel:${siteSettings.phoneTel}`}
+                onClick={() => trackEvent("footer_cta_click", { placement: "footer_cta", action: "phone" })}
+                className="inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5"
+              >
+                Позвонить: {siteSettings.phoneDisplay}
+              </a>
+              <a
+                href={`mailto:${siteSettings.emailInfo}`}
+                onClick={() => trackEvent("footer_cta_click", { placement: "footer_cta", action: "email" })}
+                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-800 hover:border-violet-200"
+              >
+                Написать: {siteSettings.emailInfo}
+              </a>
             </div>
           </div>
         </section>
