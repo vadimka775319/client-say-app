@@ -28,9 +28,20 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
   Write-Error "Install GitHub CLI: winget install GitHub.cli  then: gh auth login"
 }
 
-gh auth status 2>&1 | Out-Host
-if ($LASTEXITCODE -ne 0) {
-  Write-Error "Not logged in. Run: gh auth login"
+# gh writes "not logged in" to stderr — PowerShell 5 treats that as a terminating error if we let it through.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "SilentlyContinue"
+& gh auth status 2>$null 1>$null
+$ghOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEap
+if (-not $ghOk) {
+  Write-Host ""
+  Write-Host "GitHub CLI is not logged in." -ForegroundColor Yellow
+  Write-Host "Run once in this window, then start this script again:" -ForegroundColor Yellow
+  Write-Host "  gh auth login" -ForegroundColor Cyan
+  Write-Host ""
+  Write-Host "Pick: GitHub.com -> HTTPS -> authenticate -> browser (or token with 'repo' scope)." -ForegroundColor DarkGray
+  exit 1
 }
 
 if (-not (Test-Path -LiteralPath $PrivateKeyPath)) {
