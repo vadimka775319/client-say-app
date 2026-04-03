@@ -120,24 +120,46 @@ jobs:
           fi
           cd "$APP_DIR" || { echo "FATAL: cannot cd $APP_DIR" >&2; exit 1; }
 
-          # Git 2.35+ "dubious ownership" in /var/www often yields fetch exit 128
-          git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
           export GIT_TERMINAL_PROMPT=0
+          # dubious ownership в /var/www под root → частый exit 128
+          git config --global --add safe.directory '*' 2>/dev/null || git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 
           if [ ! -d ".git" ]; then
-            rm -rf "${APP_DIR:?}/"*
-            git clone "$REPO_URL" "$APP_DIR"
+            echo "No .git — backup .env, wipe dir, shallow clone (rm -rf * не трогает dotfiles — из-за этого ломался clone)" >&2
+            ENV_BAK=""
+            if [ -f "$APP_DIR/.env" ]; then
+              ENV_BAK=$(mktemp /tmp/clientsay.env.XXXXXX)
+              cp -a "$APP_DIR/.env" "$ENV_BAK"
+            fi
+            rm -rf "$APP_DIR"
+            mkdir -p "$(dirname "$APP_DIR")"
+            if ! git clone --depth 1 -b main "$REPO_URL" "$APP_DIR"; then
+              echo "Clone branch main failed, trying master..." >&2
+              git clone --depth 1 -b master "$REPO_URL" "$APP_DIR"
+            fi
             cd "$APP_DIR"
-            git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+            if [ -n "${ENV_BAK:-}" ] && [ -f "$ENV_BAK" ]; then
+              mv "$ENV_BAK" "$APP_DIR/.env"
+              chmod 600 "$APP_DIR/.env" 2>/dev/null || true
+            fi
+          else
+            git remote set-url origin "$REPO_URL"
           fi
 
+          cd "$APP_DIR"
+          BRANCH=main
           if ! git fetch origin main; then
-            echo "git fetch failed (exit 128 often = safe.directory or network). Diagnostics:" >&2
-            git remote -v >&2 || true
-            git status >&2 || true
-            exit 128
+            echo "git fetch origin main failed, trying master..." >&2
+            BRANCH=master
+            if ! git fetch origin master; then
+              echo "git fetch failed. Diagnostics:" >&2
+              git remote -v >&2 || true
+              git status >&2 || true
+              git ls-remote --heads origin >&2 || true
+              exit 128
+            fi
           fi
-          git reset --hard origin/main
+          git reset --hard "origin/${BRANCH}"
 
           if [ -f .env ]; then
             set -a
