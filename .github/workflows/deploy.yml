@@ -131,6 +131,8 @@ jobs:
               ENV_BAK=$(mktemp /tmp/clientsay.env.XXXXXX)
               cp -a "$APP_DIR/.env" "$ENV_BAK"
             fi
+            # Нельзя удалять текущую рабочую директорию: после rm -rf git получит ENOENT cwd.
+            cd /
             rm -rf "$APP_DIR"
             mkdir -p "$(dirname "$APP_DIR")"
             if ! git clone --depth 1 -b main "$REPO_URL" "$APP_DIR"; then
