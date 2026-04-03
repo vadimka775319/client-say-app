@@ -17,7 +17,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -44,6 +44,20 @@ jobs:
             APP_DIR="/var/www/client-say-app"
             REPO_URL="https://github.com/vadimka775319/client-say-app.git"
 
+            # Неинтерактивный SSH часто без nvm/fnm в PATH — подтянуть как при входе по SSH.
+            if [ -f "$HOME/.nvm/nvm.sh" ]; then
+              # shellcheck disable=SC1090
+              . "$HOME/.nvm/nvm.sh"
+              nvm use default 2>/dev/null || true
+            fi
+            if command -v fnm >/dev/null 2>&1; then
+              eval "$(fnm env)"
+            fi
+            if [ -f "$HOME/.profile" ]; then
+              # shellcheck disable=SC1090
+              . "$HOME/.profile"
+            fi
+
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
@@ -56,9 +70,24 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            npm ci
-            npx prisma generate
-            npm run build
+            # Секреты и DATABASE_URL с VPS (файл в .gitignore). Нужны для runtime; для сборки ниже — запасные значения.
+            if [ -f .env ]; then
+              set -a
+              # shellcheck disable=SC1091
+              . ./.env
+              set +a
+            fi
+
+            (
+              set -euo pipefail
+              export NODE_ENV=production
+              export AUTH_SECRET="${AUTH_SECRET:-ci-build-placeholder-secret-min-32-chars!!}"
+              export DATABASE_URL="${DATABASE_URL:-postgresql://127.0.0.1:5432/build_placeholder?schema=public}"
+              npm ci
+              npm run build
+            )
+
+            command -v pm2 >/dev/null 2>&1 || { echo "pm2 не найден в PATH. Установите: npm i -g pm2" >&2; exit 1; }
 
             pm2 restart client-say-app || pm2 start npm --name client-say-app -- start
             pm2 save
