@@ -3,8 +3,8 @@ export const siteContact = {
   phoneDisplay: "",
   phoneTel: "",
   schedule: "Ответим на e-mail в рабочие дни (МСК)",
-  emailInfo: "vadimka7753191@gmail.com",
-  emailPartners: "vadimka7753191@gmail.com",
+  emailInfo: "clientsay@mail.ru",
+  emailPartners: "clientsay@mail.ru",
   /** E-mail для ВКонтакте / сообществ — заполните позже */
   emailVk: "" as string,
   brandLine: "Сервис обратной связи по QR с бонусами для гостя",

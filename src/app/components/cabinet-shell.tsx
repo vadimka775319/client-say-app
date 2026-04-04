@@ -36,7 +36,7 @@ export function CabinetShell({ title, subtitle, children }: CabinetShellProps) {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-3 md:px-8">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 sm:gap-4">
             <Link href="/" className="group flex shrink-0 items-center gap-2 no-underline">
-              <span className="bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-lg font-black tracking-tight text-transparent transition-opacity group-hover:opacity-90 md:text-xl">
+              <span className="font-brand-logo bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-lg tracking-tight text-transparent transition-opacity group-hover:opacity-90 md:text-xl">
                 {BRAND_NAME}
               </span>
             </Link>

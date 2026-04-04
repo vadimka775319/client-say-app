@@ -15,7 +15,7 @@ export const defaultSiteSettings: SiteSettings = {
   phoneDisplay: "",
   phoneTel: "",
   schedule: "Ответим на e-mail в рабочие дни (МСК)",
-  emailInfo: "vadimka7753191@gmail.com",
+  emailInfo: "clientsay@mail.ru",
   brandLine: "Сервис обратной связи с использованием QR-кодов",
   basePartners: 30,
   usersPerPartner: 3,

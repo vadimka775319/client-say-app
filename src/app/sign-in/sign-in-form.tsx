@@ -200,7 +200,10 @@ export default function SignInForm() {
     <>
       <header className="border-b border-white/40 bg-white/60 px-5 py-3 backdrop-blur-md md:px-8">
         <div className="mx-auto flex max-w-lg items-center justify-between">
-          <Link href="/" className="text-lg font-black tracking-tight text-transparent bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text">
+          <Link
+            href="/"
+            className="font-brand-logo text-lg tracking-tight text-transparent bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text"
+          >
             {BRAND_NAME}
           </Link>
           <Link href="/" className="text-xs font-semibold text-slate-600 hover:text-violet-700">
@@ -312,7 +315,9 @@ export default function SignInForm() {
             )}
             <input
               className="input-cs"
-              placeholder="Email или телефон"
+              placeholder={
+                isSuperCabinet && mode === "login" ? "clientsay@mail.ru" : "Email или телефон"
+              }
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               autoComplete="username"

@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { findUserByLogin, verifyPassword } from "@/lib/auth-server";
@@ -45,10 +44,9 @@ export async function POST(req: Request) {
     }
 
     const token = await signSession(user.id, user.role as SessionRole);
-    const jar = await cookies();
-    jar.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
-
-    return NextResponse.json({ ok: true as const, role: user.role as SessionRole });
+    const res = NextResponse.json({ ok: true as const, role: user.role as SessionRole });
+    res.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
+    return res;
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "";
     if (msg.includes("AUTH_SECRET")) {
@@ -58,10 +56,16 @@ export async function POST(req: Request) {
       );
     }
     const code = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
-    if (code === "P1001") {
+    if (code === "P1001" || code === "P1012" || msg.includes("DATABASE_URL")) {
       return NextResponse.json(
         getPublicError("db_unreachable", "База данных недоступна. Проверьте DATABASE_URL на сервере."),
         { status: 503 },
+      );
+    }
+    if (process.env.NODE_ENV === "development") {
+      return NextResponse.json(
+        getPublicError("internal", `Ошибка входа (dev): ${msg || String(e)}`),
+        { status: 500 },
       );
     }
     return NextResponse.json(getPublicError("internal", "Ошибка сервера при входе. Попробуйте позже."), { status: 500 });

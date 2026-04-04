@@ -26,6 +26,13 @@ body {
   font-family: var(--font-app-sans);
 }
 
+/* Логотип: локальный variable-шрифт (без Google Fonts на сборке) */
+.font-brand-logo {
+  font-family: "Onest Variable", Onest, var(--font-app-sans);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
 .card {
   border-radius: 1rem;
   border: 1px solid #e2e8f0;

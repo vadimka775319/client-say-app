@@ -176,7 +176,7 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-sky-100/80 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3 md:px-8">
           <Link href="/" className="flex shrink-0 items-center gap-2 no-underline">
-            <span className="bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-2xl font-black tracking-tight text-transparent md:text-3xl">
+            <span className="font-brand-logo bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-2xl tracking-tight text-transparent md:text-3xl">
               {BRAND_NAME}
             </span>
           </Link>
@@ -189,8 +189,8 @@ export default function Home() {
           >
             {mobileMenuOpen ? "Закрыть" : "Меню"}
           </button>
-          <div className="hidden min-w-0 flex-1 items-center justify-end gap-3 md:flex md:flex-nowrap lg:gap-6">
-            <nav className="flex min-w-0 flex-nowrap items-center gap-0.5 text-sm lg:gap-1">
+          <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex md:min-w-0 lg:gap-4">
+            <nav className="scrollbar-none flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-0.5 overflow-x-auto overscroll-x-contain py-1 text-sm [-ms-overflow-style:none] [scrollbar-width:none] lg:gap-1 [&::-webkit-scrollbar]:hidden">
               <a
                 href="#how"
                 className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
@@ -228,7 +228,7 @@ export default function Home() {
                 Материалы
               </a>
             </nav>
-            <div className="flex shrink-0 flex-nowrap items-center gap-2">
+            <div className="flex shrink-0 flex-nowrap items-center gap-2 border-l border-slate-100 pl-2 lg:pl-3">
               <Link
                 href="/partner"
                 className="whitespace-nowrap rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition-all hover:border-violet-200 hover:shadow-md"
@@ -426,7 +426,20 @@ export default function Home() {
                   className="overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-md transition-shadow hover:shadow-lg"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={reward.imageUrl} alt="" className="h-44 w-full object-cover" />
+                  <img
+                    src={reward.imageUrl}
+                    alt=""
+                    className="h-44 w-full object-cover"
+                    onError={(e) => {
+                      const el = e.currentTarget;
+                      el.onerror = null;
+                      el.src =
+                        "data:image/svg+xml," +
+                        encodeURIComponent(
+                          '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="176"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e0e7ff"/><stop offset="100%" stop-color="#f5f3ff"/></linearGradient></defs><rect width="800" height="176" fill="url(#g)"/></svg>',
+                        );
+                    }}
+                  />
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="font-bold text-slate-900">{reward.title}</h3>

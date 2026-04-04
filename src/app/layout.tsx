@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BRAND_TITLE } from "@/lib/brand";
+import "@fontsource-variable/onest/index.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

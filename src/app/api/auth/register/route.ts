@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -61,8 +60,7 @@ export async function POST(req: Request) {
           role: Role.USER,
         },
       });
-      await setSessionCookie(user.id, "USER");
-      return NextResponse.json({ ok: true as const, role: "USER" as const });
+      return jsonWithSession(user.id, "USER", { ok: true as const, role: "USER" as const });
     }
 
     const { email, phone } = normalizeLogin(data.login);
@@ -91,8 +89,7 @@ export async function POST(req: Request) {
       },
     });
 
-    await setSessionCookie(user.id, "PARTNER");
-    return NextResponse.json({ ok: true as const, role: "PARTNER" as const });
+    return jsonWithSession(user.id, "PARTNER", { ok: true as const, role: "PARTNER" as const });
   } catch (e: unknown) {
     const code = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
     const message = e instanceof Error ? e.message : "";
@@ -127,8 +124,9 @@ export async function POST(req: Request) {
   }
 }
 
-async function setSessionCookie(userId: string, role: SessionRole) {
+async function jsonWithSession(userId: string, role: SessionRole, body: Record<string, unknown>) {
   const token = await signSession(userId, role);
-  const jar = await cookies();
-  jar.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
+  const res = NextResponse.json(body);
+  res.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
+  return res;
 }

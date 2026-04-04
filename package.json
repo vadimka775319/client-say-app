@@ -21,6 +21,7 @@
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@fontsource-variable/onest": "^5.2.11",
     "@prisma/client": "5.22.0",
     "@tailwindcss/postcss": "^4",
     "bcryptjs": "^3.0.3",

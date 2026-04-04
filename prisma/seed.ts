@@ -34,13 +34,13 @@ async function upsertUser(params: {
 
 async function main() {
   await upsertUser({
-    email: "owner@clientsay.ru",
+    email: "clientsay@mail.ru",
     password: "OwnerOnly#2026",
     role: Role.SUPER_ADMIN,
     firstName: "Owner",
     lastName: "Admin",
   });
-  console.log("Seeded super admin: owner@clientsay.ru");
+  console.log("Seeded super admin: clientsay@mail.ru");
 
   const partnerUser = await upsertUser({
     email: "partner@clientsay.ru",
@@ -75,7 +75,7 @@ async function main() {
   await prisma.sitePublicConfig.upsert({
     where: { id: "default" },
     update: {
-      emailInfo: "vadimka7753191@gmail.com",
+      emailInfo: "clientsay@mail.ru",
       phoneDisplay: "",
       phoneTel: "",
       schedule: "Ответим на e-mail в рабочие дни (МСК)",
@@ -83,7 +83,7 @@ async function main() {
     create: {
       id: "default",
       brandLine: "Сервис обратной связи с использованием QR-кодов",
-      emailInfo: "vadimka7753191@gmail.com",
+      emailInfo: "clientsay@mail.ru",
       phoneDisplay: "",
       phoneTel: "",
       schedule: "Ответим на e-mail в рабочие дни (МСК)",
