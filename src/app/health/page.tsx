@@ -35,11 +35,16 @@ export default function HealthCheckPage() {
           {body}
         </pre>
         <p className="mt-4 text-xs text-slate-500">
-          Надёжная ссылка без статики:{" "}
+          JSON версии деплоя (одинаковый ответ):{" "}
           <a href="/api/deploy-meta" className="font-semibold text-violet-700 underline">
             /api/deploy-meta
           </a>
-          . Поле <code className="rounded bg-slate-200 px-1">source</code>: <strong>file</strong> — из{" "}
+          {" · "}
+          <a href="/api/site/deploy-meta" className="font-semibold text-violet-700 underline">
+            /api/site/deploy-meta
+          </a>
+          . Если оба дают 404 с текстом «This page could not be found» — это ответ Next: на сервере крутится старая сборка без этих маршрутов; нужен успешный деплой и перезапуск PM2. Если первый 404, а второй открывается — сузьте правила nginx: проксируйте весь <code className="rounded bg-slate-200 px-1">/api/</code> на приложение.{" "}
+          Поле <code className="rounded bg-slate-200 px-1">source</code>: <strong>file</strong> — из{" "}
           <code className="rounded bg-slate-200 px-1">public/deploy-meta.json</code>, <strong>git</strong> — из{" "}
           <code className="rounded bg-slate-200 px-1">git rev-parse</code> в каталоге приложения на сервере (если есть .git).
         </p>
