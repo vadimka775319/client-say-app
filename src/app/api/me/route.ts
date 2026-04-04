@@ -21,8 +21,18 @@ export async function GET() {
             locations: partner.locations,
           }
         : null,
+      stats: null as { briefsCompleted: number } | null,
     });
   }
 
-  return NextResponse.json({ user: session, partner: null });
+  if (session.role === "USER") {
+    const briefsCompleted = await prisma.briefResponse.count({ where: { userId: session.id } });
+    return NextResponse.json({
+      user: session,
+      partner: null,
+      stats: { briefsCompleted },
+    });
+  }
+
+  return NextResponse.json({ user: session, partner: null, stats: null });
 }

@@ -24,6 +24,8 @@ export async function GET() {
     fundedByPlatform: r.fundedByPlatform,
     title: r.title,
     description: r.description,
+    giftTerms: r.termsText || undefined,
+    giftConditions: r.rulesText || undefined,
     imageUrl: r.imageUrl,
     pointsCost: r.pointsCost,
     totalStock: r.totalStock,

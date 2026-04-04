@@ -32,6 +32,8 @@ model User {
   passwordHash String
   firstName    String
   lastName     String   @default("")
+  /// Город/регион для списка «партнёры рядом» в кабинете пользователя
+  city         String   @default("")
   role         Role
   points       Int      @default(0)
   createdAt    DateTime @default(now())
@@ -100,6 +102,10 @@ model Reward {
   fundedByPlatform Boolean   @default(false)
   title            String
   description      String    @default("")
+  /// Сроки акции (текст для гостя)
+  termsText        String    @default("")
+  /// Условия получения подарка
+  rulesText        String    @default("")
   imageUrl         String    @default("")
   pointsCost       Int
   totalStock       Int

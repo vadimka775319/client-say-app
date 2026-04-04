@@ -8,6 +8,7 @@ const bodySchema = z.object({
   lastName: z.string().max(80).optional().default(""),
   email: z.string().max(120).optional().default(""),
   phone: z.string().max(40).optional().default(""),
+  city: z.string().max(120).optional().default(""),
 });
 
 export async function PATCH(req: Request) {
@@ -28,7 +29,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: { code: "validation", message: "Проверьте имя и контакты" } }, { status: 400 });
   }
 
-  const { firstName, lastName, email, phone } = parsed.data;
+  const { firstName, lastName, email, phone, city } = parsed.data;
   const emailTrim = email.trim();
   const emailNorm =
     emailTrim === ""
@@ -47,6 +48,7 @@ export async function PATCH(req: Request) {
       data: {
         firstName: firstName.trim(),
         lastName: (lastName ?? "").trim(),
+        city: city.trim(),
         email: emailNorm,
         phone: phoneNorm,
       },
@@ -59,6 +61,7 @@ export async function PATCH(req: Request) {
         phone: updated.phone,
         firstName: updated.firstName,
         lastName: updated.lastName,
+        city: updated.city,
         points: updated.points,
       },
     });

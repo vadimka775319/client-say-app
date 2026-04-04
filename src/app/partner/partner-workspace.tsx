@@ -3,14 +3,7 @@
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { computeBriefPoints, partners, type BriefQuestionType } from "@/lib/mock-data";
-import { getBriefResponseCounts, incrementBriefResponseCount } from "@/lib/partner-brief-stats";
-import { seedRedemptionPoolForNewReward } from "@/lib/redemption-code-pool";
-import {
-  readPartnerUploadedRewards,
-  writePartnerUploadedRewards,
-  type PartnerUploadedReward,
-} from "@/lib/partner-uploaded-rewards";
+import { computeBriefPoints, type BriefQuestionType } from "@/lib/mock-data";
 
 type DraftQuestion = { id: string; type: BriefQuestionType; prompt: string; options: string };
 type BriefItem = {
@@ -18,73 +11,55 @@ type BriefItem = {
   title: string;
   questions: DraftQuestion[];
   pointsForComplete: number;
+  responseCount: number;
   qrCode: string;
   qrDataUrl?: string;
 };
 
-const PARTNER_REWARD_OWNER_ID = partners[0]?.id ?? "partner-local";
+type ApiQuestion = { id: string; type: string; prompt: string; options: string[] };
+type ApiBriefRow = {
+  id: string;
+  title: string;
+  pointsOverride: number | null;
+  pointsForComplete: number;
+  responseCount: number;
+  questions: ApiQuestion[];
+};
 
-function readPartnerStorage(): {
-  companyName: string;
-  companyCity: string;
-  companyAddress: string;
-  locations: number;
-  briefs: BriefItem[];
-  registeredUsers: number;
-} {
-  if (typeof window === "undefined") {
-    return { companyName: "", companyCity: "", companyAddress: "", locations: 0, briefs: [], registeredUsers: 0 };
-  }
-
-  let companyName = "";
-  let companyCity = "";
-  let companyAddress = "";
-  let locations = 0;
-  let briefs: BriefItem[] = [];
-  let registeredUsers = 0;
-
-  try {
-    const rawProfile = localStorage.getItem("clientsay_partner_profile");
-    if (rawProfile) {
-      const p = JSON.parse(rawProfile) as {
-        companyName?: string;
-        companyCity?: string;
-        companyAddress?: string;
-        locations?: number;
-      };
-      companyName = p.companyName ?? "";
-      companyCity = p.companyCity ?? "";
-      companyAddress = p.companyAddress ?? "";
-      locations = p.locations ?? 0;
-    }
-  } catch {
-    // no-op
-  }
-
-  try {
-    const rawBriefs = localStorage.getItem("clientsay_partner_briefs");
-    if (rawBriefs) {
-      const saved = JSON.parse(rawBriefs) as BriefItem[];
-      if (Array.isArray(saved)) briefs = saved;
-    }
-  } catch {
-    // no-op
-  }
-
-  try {
-    const userAccountsRaw = localStorage.getItem("clientsay_accounts_user");
-    const userAccounts = userAccountsRaw ? (JSON.parse(userAccountsRaw) as unknown[]) : [];
-    registeredUsers = Array.isArray(userAccounts) ? userAccounts.length : 0;
-  } catch {
-    registeredUsers = 0;
-  }
-
-  return { companyName, companyCity, companyAddress, locations, briefs, registeredUsers };
-}
+type PartnerCabinetReward = {
+  id: string;
+  title: string;
+  description: string;
+  termsText: string;
+  rulesText: string;
+  imageUrl: string;
+  pointsCost: number;
+  totalStock: number;
+  stockLeft: number;
+  startsAt: string;
+  endsAt: string;
+};
 
 function publicBriefUrl(id: string): string {
   if (typeof window === "undefined") return `https://clientsay.ru/brief/${id}`;
   return `${window.location.origin}/brief/${id}`;
+}
+
+function apiRowToBriefItem(b: ApiBriefRow): BriefItem {
+  return {
+    id: b.id,
+    title: b.title,
+    pointsForComplete: b.pointsForComplete,
+    responseCount: b.responseCount,
+    questions: b.questions.map((q) => ({
+      id: q.id,
+      type: (q.type === "TEXT" ? "text" : q.type === "RATING" ? "rating" : "choice") as BriefQuestionType,
+      prompt: q.prompt,
+      options: q.options?.length ? q.options.join(", ") : "",
+    })),
+    qrCode: publicBriefUrl(b.id),
+    qrDataUrl: undefined,
+  };
 }
 
 async function makeQrDataUrl(url: string): Promise<string> {
@@ -102,24 +77,23 @@ function downloadDataUrl(dataUrl: string, filename: string) {
 }
 
 export function PartnerWorkspace() {
-  const [initialData] = useState(readPartnerStorage);
-  const [companyName, setCompanyName] = useState(initialData.companyName);
-  const [companyCity, setCompanyCity] = useState(initialData.companyCity);
-  const [companyAddress, setCompanyAddress] = useState(initialData.companyAddress);
-  const [locations, setLocations] = useState(initialData.locations);
-  const [registeredUsers] = useState(initialData.registeredUsers);
+  const [companyName, setCompanyName] = useState("");
+  const [companyCity, setCompanyCity] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [locations, setLocations] = useState(0);
+  const [registeredUsers, setRegisteredUsers] = useState(0);
+  const [cabinetLoading, setCabinetLoading] = useState(true);
+  const [cabinetError, setCabinetError] = useState<string | null>(null);
   const [briefTitle, setBriefTitle] = useState("");
   const [manualPoints, setManualPoints] = useState(0);
   const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[]>([
     { id: "q-1", type: "text", prompt: "", options: "" },
   ]);
-  const [briefs, setBriefs] = useState<BriefItem[]>(initialData.briefs);
+  const [briefs, setBriefs] = useState<BriefItem[]>([]);
   const [message, setMessage] = useState("");
   const [editingBriefId, setEditingBriefId] = useState<string | null>(null);
   const [qrBusyId, setQrBusyId] = useState<string | null>(null);
-  const [statsTick, setStatsTick] = useState(0);
-  const [partnerRewards, setPartnerRewards] = useState<PartnerUploadedReward[]>([]);
-  const skipPartnerRewardsWrite = useRef(true);
+  const [partnerRewards, setPartnerRewards] = useState<PartnerCabinetReward[]>([]);
 
   const [editingPrizeId, setEditingPrizeId] = useState<string | null>(null);
   const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null);
@@ -141,15 +115,48 @@ export function PartnerWorkspace() {
   });
 
   const responseCounts = useMemo(() => {
-    void statsTick;
-    return getBriefResponseCounts();
-  }, [statsTick]);
+    const m: Record<string, number> = {};
+    for (const b of briefs) m[b.id] = b.responseCount ?? 0;
+    return m;
+  }, [briefs]);
+
+  const reloadCabinet = useCallback(async () => {
+    setCabinetError(null);
+    try {
+      const br = await fetch("/api/partner/briefs", { cache: "no-store" });
+      if (!br.ok) {
+        if (br.status === 403) setCabinetError("Нет доступа.");
+        return;
+      }
+      const j = (await br.json()) as { briefs: ApiBriefRow[]; registeredUsers: number };
+      setRegisteredUsers(j.registeredUsers ?? 0);
+      setBriefs((j.briefs ?? []).map(apiRowToBriefItem));
+    } catch {
+      setCabinetError("Не удалось загрузить брифы.");
+    }
+  }, []);
 
   useEffect(() => {
-    const onStats = () => setStatsTick((t) => t + 1);
-    window.addEventListener("clientsay-brief-stats-changed", onStats);
-    return () => window.removeEventListener("clientsay-brief-stats-changed", onStats);
-  }, []);
+    let cancelled = false;
+    (async () => {
+      setCabinetLoading(true);
+      setCabinetError(null);
+      await reloadCabinet();
+      if (cancelled) return;
+      try {
+        const rr = await fetch("/api/partner/rewards", { cache: "no-store" });
+        if (rr.ok && !cancelled) {
+          const j = (await rr.json()) as { rewards?: PartnerCabinetReward[] };
+          setPartnerRewards(Array.isArray(j.rewards) ? j.rewards : []);
+        }
+      } finally {
+        if (!cancelled) setCabinetLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadCabinet]);
 
   const companyHydratedFromApi = useRef(false);
   useEffect(() => {
@@ -172,30 +179,6 @@ export function PartnerWorkspace() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "clientsay_partner_profile",
-      JSON.stringify({ companyName, companyCity, companyAddress, locations, reviewsCount: 0, rating: 0 }),
-    );
-    window.dispatchEvent(new Event("clientsay-partner-profile-changed"));
-  }, [companyName, companyCity, companyAddress, locations]);
-
-  useEffect(() => {
-    localStorage.setItem("clientsay_partner_briefs", JSON.stringify(briefs));
-  }, [briefs]);
-
-  useEffect(() => {
-    setPartnerRewards(readPartnerUploadedRewards());
-  }, []);
-
-  useEffect(() => {
-    if (skipPartnerRewardsWrite.current) {
-      skipPartnerRewardsWrite.current = false;
-      return;
-    }
-    writePartnerUploadedRewards(partnerRewards);
-  }, [partnerRewards]);
 
   const regenerateQr = useCallback(async (briefId: string) => {
     setQrBusyId(briefId);
@@ -220,7 +203,6 @@ export function PartnerWorkspace() {
   }, [expandedBriefId, briefs, regenerateQr]);
 
   const autoPoints = useMemo(() => computeBriefPoints(draftQuestions.length), [draftQuestions.length]);
-  const pointsToSave = manualPoints > 0 ? manualPoints : autoPoints;
 
   const addQuestion = useCallback(() => {
     setDraftQuestions((q) => [...q, { id: `q-${Date.now()}`, type: "text", prompt: "", options: "" }]);
@@ -258,39 +240,47 @@ export function PartnerWorkspace() {
     const validQuestions = draftQuestions.filter((q) => q.prompt.trim());
     if (!validQuestions.length) return setMessage("Добавьте хотя бы один вопрос.");
 
-    const id = editingBriefId ?? `brief-${Date.now()}`;
-    const url = publicBriefUrl(id);
-    let qrDataUrl: string | undefined;
-    try {
-      qrDataUrl = await makeQrDataUrl(url);
-    } catch {
-      setMessage("Не удалось сгенерировать QR. Проверьте соединение и попробуйте снова.");
-      return;
-    }
+    const questionsPayload = validQuestions.map((q, i) => ({
+      type: q.type.toUpperCase() as "TEXT" | "RATING" | "CHOICE",
+      prompt: q.prompt.trim(),
+      options:
+        q.type === "choice"
+          ? q.options
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined,
+      order: i,
+    }));
 
-    const nextItem: BriefItem = {
-      id,
+    const body = {
       title,
-      questions: validQuestions,
-      pointsForComplete: pointsToSave,
-      qrCode: url,
-      qrDataUrl,
+      pointsOverride: manualPoints > 0 ? manualPoints : null,
+      questions: questionsPayload,
     };
 
-    if (editingBriefId) {
-      setBriefs((b) => b.map((x) => (x.id === editingBriefId ? nextItem : x)));
-      setMessage("Бриф обновлён, QR пересоздан.");
-    } else {
-      setBriefs((b) => [nextItem, ...b]);
-      setMessage("Бриф создан. Ниже — QR и ссылка; гости открывают страницу по QR.");
+    try {
+      const url = editingBriefId ? `/api/partner/briefs/${editingBriefId}` : "/api/partner/briefs";
+      const r = await fetch(url, {
+        method: editingBriefId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = (await r.json()) as { error?: { message?: string } };
+      if (!r.ok) {
+        setMessage(j?.error?.message ?? "Не удалось сохранить бриф.");
+        return;
+      }
+      setMessage(
+        editingBriefId
+          ? "Бриф обновлён в базе. QR ведёт на ту же страницу."
+          : "Бриф создан в базе. Ниже — ссылка и QR для печати.",
+      );
+      resetConstructor();
+      await reloadCabinet();
+    } catch {
+      setMessage("Сеть недоступна при сохранении брифа.");
     }
-    resetConstructor();
-  }
-
-  function simulateResponse(briefId: string) {
-    incrementBriefResponseCount(briefId);
-    setStatsTick((t) => t + 1);
-    setMessage("Засчитан тестовый ответ (для графика). В продакшене счётчик пойдёт с формы брифа.");
   }
 
   function resetPrizeForm() {
@@ -309,13 +299,13 @@ export function PartnerWorkspace() {
     });
   }
 
-  function startEditPrize(r: PartnerUploadedReward) {
+  function startEditPrize(r: PartnerCabinetReward) {
     setEditingPrizeId(r.id);
     setPrizeForm({
       title: r.title,
       description: r.description,
-      giftTerms: r.giftTerms ?? "",
-      giftConditions: r.giftConditions ?? "",
+      giftTerms: r.termsText ?? "",
+      giftConditions: r.rulesText ?? "",
       imageUrl: r.imageUrl,
       pointsCost: String(r.pointsCost),
       totalStock: String(r.totalStock),
@@ -327,33 +317,44 @@ export function PartnerWorkspace() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function submitPartnerPrize(e: FormEvent) {
+  async function submitPartnerPrize(e: FormEvent) {
     e.preventDefault();
     const total = Math.max(1, Number(prizeForm.totalStock) || 1);
     const left = Math.min(Math.max(0, Number(prizeForm.stockLeft) || 0), total);
-    const base: PartnerUploadedReward = {
-      id: editingPrizeId ?? `pr-cabinet-${Date.now()}`,
-      partnerId: PARTNER_REWARD_OWNER_ID,
+    const payload = {
       title: prizeForm.title.trim() || "Приз партнёра",
       description: prizeForm.description.trim(),
-      giftTerms: prizeForm.giftTerms.trim() || undefined,
-      giftConditions: prizeForm.giftConditions.trim() || undefined,
+      termsText: prizeForm.giftTerms.trim(),
+      rulesText: prizeForm.giftConditions.trim(),
       imageUrl: prizeForm.imageUrl.trim() || "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80",
       pointsCost: Number(prizeForm.pointsCost) || 0,
       totalStock: total,
       stockLeft: left,
-      startsAt: new Date(prizeForm.startsAt + "T00:00:00").toISOString(),
-      endsAt: new Date(prizeForm.endsAt + "T23:59:59").toISOString(),
+      startsAt: new Date(prizeForm.startsAt + "T12:00:00.000Z").toISOString(),
+      endsAt: new Date(prizeForm.endsAt + "T23:59:59.000Z").toISOString(),
     };
-    if (editingPrizeId) {
-      setPartnerRewards((list) => list.map((x) => (x.id === editingPrizeId ? { ...base, id: editingPrizeId } : x)));
-      setMessage("Приз обновлён.");
-    } else {
-      setPartnerRewards((r) => [...r, base]);
-      seedRedemptionPoolForNewReward(base.id, base.totalStock);
-      setMessage("Приз добавлен на витрину (виден пользователям в личном кабинете).");
+    try {
+      const url = editingPrizeId ? `/api/partner/rewards/${editingPrizeId}` : "/api/partner/rewards";
+      const r = await fetch(url, {
+        method: editingPrizeId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = (await r.json()) as { error?: { message?: string } };
+      if (!r.ok) {
+        setMessage(j?.error?.message ?? "Не удалось сохранить приз.");
+        return;
+      }
+      setMessage(editingPrizeId ? "Приз обновлён в базе." : "Приз добавлен — виден пользователям в кабинете.");
+      resetPrizeForm();
+      const rr = await fetch("/api/partner/rewards", { cache: "no-store" });
+      if (rr.ok) {
+        const jr = (await rr.json()) as { rewards?: PartnerCabinetReward[] };
+        setPartnerRewards(Array.isArray(jr.rewards) ? jr.rewards : []);
+      }
+    } catch {
+      setMessage("Сеть недоступна при сохранении приза.");
     }
-    resetPrizeForm();
   }
 
   function onPrizeImageFile(file: File | null) {
@@ -366,10 +367,19 @@ export function PartnerWorkspace() {
     reader.readAsDataURL(file);
   }
 
-  function removePartnerPrize(id: string) {
+  async function removePartnerPrize(id: string) {
     if (!confirm("Удалить приз из витрины?")) return;
-    setPartnerRewards((r) => r.filter((x) => x.id !== id));
-    if (editingPrizeId === id) resetPrizeForm();
+    try {
+      const r = await fetch(`/api/partner/rewards/${id}`, { method: "DELETE" });
+      if (!r.ok) {
+        setMessage("Не удалось удалить приз.");
+        return;
+      }
+      if (editingPrizeId === id) resetPrizeForm();
+      setPartnerRewards((list) => list.filter((x) => x.id !== id));
+    } catch {
+      setMessage("Сеть недоступна.");
+    }
   }
 
   const maxResponses = Math.max(1, ...briefs.map((b) => responseCounts[b.id] ?? 0));
@@ -403,6 +413,13 @@ export function PartnerWorkspace() {
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-8 md:px-8">
+      {cabinetError ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{cabinetError}</div>
+      ) : null}
+      {cabinetLoading ? (
+        <p className="text-sm text-slate-500">Загрузка данных из базы…</p>
+      ) : null}
+
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-xs uppercase tracking-widest text-slate-500">Кабинет партнера</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">{companyName || "Новая компания"}</h1>
@@ -421,8 +438,9 @@ export function PartnerWorkspace() {
           <p className="mt-2 text-3xl font-bold">{locations}</p>
         </article>
         <article className="card">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Зарегистрированных пользователей</p>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Пользователей прошли брифы</p>
           <p className="mt-2 text-3xl font-bold">{registeredUsers}</p>
+          <p className="mt-1 text-[11px] text-slate-500">Уникальные аккаунты с хотя бы одним ответом по вашим брифам</p>
         </article>
         <article className="card">
           <p className="text-xs uppercase tracking-wide text-slate-500">Брифов создано</p>
@@ -566,8 +584,7 @@ export function PartnerWorkspace() {
       <section className="card">
         <h2 className="h2">Статистика ответов по брифам</h2>
         <p className="mb-4 text-sm text-slate-600">
-          Демо: нажмите «+ ответ» у брифа, чтобы увидеть рост на графике. После подключения API счётчик будет расти с
-          реальных прохождений.
+          Счётчики из базы: каждое прохождение брифа пользователем увеличивает столбец.
         </p>
         {briefs.length === 0 ? (
           <p className="text-sm text-slate-500">Создайте бриф — здесь появится диаграмма.</p>
@@ -580,16 +597,7 @@ export function PartnerWorkspace() {
                 <div key={b.id}>
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
                     <span className="max-w-[60%] truncate font-medium text-slate-800">{b.title}</span>
-                    <div className="flex items-center gap-2">
-                      <span>{n} отв.</span>
-                      <button
-                        type="button"
-                        className="rounded border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-800"
-                        onClick={() => simulateResponse(b.id)}
-                      >
-                        + ответ (демо)
-                      </button>
-                    </div>
+                    <span>{n} отв.</span>
                   </div>
                   <div className="mt-1 h-3 overflow-hidden rounded-full bg-slate-100">
                     <div
@@ -607,10 +615,10 @@ export function PartnerWorkspace() {
       <section className="card">
         <h2 className="h2">Призы на витрину</h2>
         <p className="mb-4 text-sm text-slate-600">
-          Загрузите акции для гостей (как в кабинете супер-админа): картинка по URL, баллы, тираж, даты. Призы появятся в
-          личном кабинете пользователя вместе с общими акциями.
+          Призы сохраняются в базе и видны пользователям в витрине. Можно загрузить фото с устройства (data URL) или указать
+          ссылку на картинку.
         </p>
-        <form onSubmit={submitPartnerPrize} className="space-y-3 rounded-xl border border-dashed border-violet-200 bg-violet-50/30 p-4 text-sm">
+        <form onSubmit={(e) => void submitPartnerPrize(e)} className="space-y-3 rounded-xl border border-dashed border-violet-200 bg-violet-50/30 p-4 text-sm">
           {editingPrizeId && (
             <p className="text-xs text-amber-800">
               Редактирование приза <strong>{editingPrizeId}</strong>. Сохраните изменения или отмените.
@@ -741,6 +749,18 @@ export function PartnerWorkspace() {
                   <p className="text-xs text-violet-700">
                     {r.pointsCost} б. · остаток {r.stockLeft}/{r.totalStock}
                   </p>
+                  {r.termsText ? (
+                    <p className="mt-1 text-xs text-slate-600">
+                      <span className="font-semibold">Сроки: </span>
+                      {r.termsText}
+                    </p>
+                  ) : null}
+                  {r.rulesText ? (
+                    <p className="mt-1 text-xs text-slate-600">
+                      <span className="font-semibold">Условия: </span>
+                      {r.rulesText}
+                    </p>
+                  ) : null}
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -749,7 +769,11 @@ export function PartnerWorkspace() {
                     >
                       Редактировать
                     </button>
-                    <button type="button" className="text-xs font-semibold text-rose-600" onClick={() => removePartnerPrize(r.id)}>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-rose-600"
+                      onClick={() => void removePartnerPrize(r.id)}
+                    >
                       Удалить
                     </button>
                   </div>

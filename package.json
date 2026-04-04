@@ -15,6 +15,7 @@
     "db:docker:down": "docker compose down",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
+    "db:sync": "prisma db push && prisma db seed",
     "git:save": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-github.ps1",
     "git:push": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-github.ps1 -Push"
   },

@@ -19,7 +19,7 @@ async function upsertUser(params: {
       role: params.role,
       firstName: params.firstName,
       lastName: params.lastName,
-      ...(params.points != null ? { points: params.points } : {}),
+      // points не трогаем при повторном seed — иначе каждый деплой сбрасывает баланс пользователя
     },
     create: {
       email: params.email,
@@ -70,10 +70,13 @@ async function main() {
 
   await prisma.reward.upsert({
     where: { id: "seed_reward_demo_coffee" },
+    /** Не трогаем stockLeft/totalStock — иначе каждый деплой сбрасывает остаток призов */
     update: {
-      stockLeft: 42,
-      totalStock: 100,
+      title: "Капучино в подарок",
+      description: "Классический капучино 300 мл. Покажите код сотруднику.",
+      imageUrl: "https://picsum.photos/seed/pulse-r1/800/440",
       pointsCost: 300,
+      startsAt: new Date("2026-03-01T00:00:00.000Z"),
       endsAt: new Date("2026-12-31T23:59:59.000Z"),
     },
     create: {

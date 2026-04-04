@@ -10,6 +10,7 @@ export type SessionUser = {
   phone: string | null;
   firstName: string;
   lastName: string;
+  city: string;
   points: number;
 };
 
@@ -28,6 +29,7 @@ export async function getSession(): Promise<SessionUser | null> {
     phone: user.phone,
     firstName: user.firstName,
     lastName: user.lastName,
+    city: user.city ?? "",
     points: user.points,
   };
 }

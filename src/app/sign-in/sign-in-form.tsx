@@ -9,6 +9,24 @@ import { cabinetPath, parseSessionRole, resolvePostLoginRedirect } from "@/lib/a
 import { BRAND_NAME } from "@/lib/brand";
 import { PARTNER_CITY_OTHER, partnerRegistrationCities } from "@/lib/site-config";
 
+/** Старые ключи без привязки к аккаунту — иначе новый партнёр видит данные предыдущего входа в этом браузере. */
+function clearLegacyPartnerBrowserState() {
+  if (typeof window === "undefined") return;
+  for (const k of [
+    "clientsay_partner_briefs",
+    "clientsay_partner_profile",
+    "clientsay_partner_rewards",
+    "clientsay_partner_brief_stats",
+    "clientsay_accounts_user",
+  ]) {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      // no-op
+    }
+  }
+}
+
 const ROLE_LABEL: Record<SessionRole, string> = {
   SUPER_ADMIN: "супер-админа",
   PARTNER: "партнёра",
@@ -111,7 +129,10 @@ export default function SignInForm() {
         setError(data?.error?.message ?? "Не удалось войти.");
         return;
       }
-      if (data?.role) redirectAfterAuth(data.role);
+      if (data?.role) {
+        if (data.role === "PARTNER") clearLegacyPartnerBrowserState();
+        redirectAfterAuth(data.role);
+      }
     } catch {
       setError("Сеть недоступна. Попробуйте снова.");
     } finally {
@@ -152,7 +173,10 @@ export default function SignInForm() {
           setError(data?.error?.message ?? "Регистрация не удалась.");
           return;
         }
-        if (data?.role) redirectAfterAuth(data.role);
+        if (data?.role) {
+          if (data.role === "PARTNER") clearLegacyPartnerBrowserState();
+          redirectAfterAuth(data.role);
+        }
         return;
       }
 
@@ -185,7 +209,10 @@ export default function SignInForm() {
         setError(data?.error?.message ?? "Регистрация не удалась.");
         return;
       }
-      if (data?.role) redirectAfterAuth(data.role);
+      if (data?.role) {
+        if (data.role === "PARTNER") clearLegacyPartnerBrowserState();
+        redirectAfterAuth(data.role);
+      }
     } catch {
       setError("Сеть недоступна. Попробуйте снова.");
     } finally {

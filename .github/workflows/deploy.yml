@@ -281,7 +281,9 @@ jobs:
               echo "::error::prisma db push не выполнен. На VPS: 1) sudo usermod -aG docker ДЕПЛОЙ_ЮЗЕР && newgrp docker (или перелогин SSH) 2) cd $APP_DIR && docker compose up -d db 3) верный DATABASE_URL в .env для этой машины." >&2
               exit 1
             fi
+            echo "=== Prisma: db push OK — схема из schema.prisma применена к БД ==="
             npm run db:seed
+            echo "=== Prisma: db seed OK — демо-аккаунты и приз обновлены (остаток призов не сбрасывается) ==="
             npm run build
           )
 
