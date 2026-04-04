@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import SignInForm from "./sign-in-form";
 
+export const dynamic = "force-dynamic";
+
 function SignInFallback() {
   return (
     <main className="mx-auto flex w-full max-w-lg flex-1 flex-col px-5 py-10">

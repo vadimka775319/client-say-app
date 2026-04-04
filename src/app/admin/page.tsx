@@ -2,6 +2,8 @@ import { AdminDashboard } from "./admin-dashboard";
 import { CabinetShell } from "@/app/components/cabinet-shell";
 import { superAdminDemoAuth } from "@/lib/mock-data";
 
+export const dynamic = "force-dynamic";
+
 export default function AdminPage() {
   const showDemoHint = process.env.NODE_ENV === "development";
 

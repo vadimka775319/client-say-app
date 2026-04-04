@@ -70,9 +70,14 @@ export default function SignInForm() {
 
   const demoHint = hintForRole(roleParam);
 
+  /** Полная перезагрузка страницы — иначе Next.js иногда не подхватывает Set-Cookie до client navigation. */
   const redirectAfterAuth = useCallback(
     (userRole: SessionRole) => {
       const target = resolvePostLoginRedirect(next, userRole);
+      if (typeof window !== "undefined") {
+        window.location.assign(target);
+        return;
+      }
       router.push(target);
       router.refresh();
     },
@@ -93,7 +98,11 @@ export default function SignInForm() {
     setBusy(true);
     setError("");
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
       const q = new URLSearchParams();
       if (next) q.set("next", next);
       if (roleParam) q.set("role", roleParam);
@@ -117,6 +126,8 @@ export default function SignInForm() {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           login: id,
@@ -160,6 +171,8 @@ export default function SignInForm() {
         }
         const res = await fetch("/api/auth/register", {
           method: "POST",
+          credentials: "include",
+          cache: "no-store",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             role: "USER",
@@ -194,6 +207,8 @@ export default function SignInForm() {
       }
       const res = await fetch("/api/auth/register", {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           role: "PARTNER",

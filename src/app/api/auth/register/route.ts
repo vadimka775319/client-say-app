@@ -135,6 +135,7 @@ export async function POST(req: Request) {
 async function jsonWithSession(req: Request, userId: string, role: SessionRole, body: Record<string, unknown>) {
   const token = await signSession(userId, role);
   const res = NextResponse.json(body);
+  res.headers.set("Cache-Control", "private, no-store, must-revalidate");
   res.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   return res;
 }
