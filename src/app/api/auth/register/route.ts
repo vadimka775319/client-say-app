@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { dbUnreachableUserMessage } from "@/lib/db-unreachable-message";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 import { hashPassword, normalizeLogin } from "@/lib/auth-server";
 import { SESSION_COOKIE_NAME, sessionCookieOptions, signSession, type SessionRole } from "@/lib/auth-session";
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
     }
     if (isPrismaConnectionError(e)) {
       return NextResponse.json(
-        { error: { code: "db_unreachable", message: "База данных недоступна. Проверьте конфигурацию сервера." } },
+        { error: { code: "db_unreachable", message: dbUnreachableUserMessage() } },
         { status: 503 },
       );
     }
