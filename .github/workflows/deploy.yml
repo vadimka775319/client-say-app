@@ -284,6 +284,14 @@ jobs:
             echo "=== Prisma: db push OK — схема из schema.prisma применена к БД ==="
             npm run db:seed
             echo "=== Prisma: db seed OK — демо-аккаунты и приз обновлены (остаток призов не сбрасывается) ==="
+            SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+            AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            if [ -f .env ]; then
+              grep -vE '^(DEPLOY_GIT_SHA|DEPLOYED_AT)=' .env > .env.deploymeta.tmp && mv .env.deploymeta.tmp .env
+            fi
+            printf 'DEPLOY_GIT_SHA="%s"\nDEPLOYED_AT="%s"\n' "$SHA" "$AT" >> .env
+            chmod 600 .env 2>/dev/null || true
+            echo "=== В .env записан DEPLOY_GIT_SHA=$SHA (видно в /api/health снаружи) ==="
             npm run build
           )
 

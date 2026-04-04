@@ -9,6 +9,21 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: appDir,
   },
+  /** Снимаем отдачу старого HTML из nginx/CDN для кабинетов и входа */
+  async headers() {
+    const noStore = "private, no-store, must-revalidate";
+    return [
+      { source: "/partner", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/partner/:path*", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/user", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/user/:path*", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/sign-in", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/sign-in/:path*", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/admin", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/admin/:path*", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/api/health", headers: [{ key: "Cache-Control", value: "no-store, must-revalidate" }] },
+    ];
+  },
 };
 
 export default nextConfig;
