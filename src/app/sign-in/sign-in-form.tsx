@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SessionRole } from "@/lib/auth-session";
 import { demoAuth } from "@/lib/mock-data";
 import { cabinetPath, parseSessionRole, resolvePostLoginRedirect } from "@/lib/auth-routes";
@@ -41,6 +41,9 @@ export default function SignInForm() {
   const [partnerCityCustom, setPartnerCityCustom] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => setOrigin(window.location.origin), []);
 
   const title = useMemo(() => {
     if (!roleParam) return `Вход в ${BRAND_NAME}`;
@@ -331,6 +334,34 @@ export default function SignInForm() {
               autoComplete={mode === "register" ? "new-password" : "current-password"}
             />
             {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
+            {error &&
+              (error.includes("База данных") ||
+                error.includes("DATABASE_URL") ||
+                error.includes("Vercel") ||
+                error.includes("PostgreSQL")) && (
+                <div className="rounded-xl border border-amber-200/90 bg-amber-50/95 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
+                  <p className="font-semibold text-amber-900">Почему так, если prisma на ПК уже «ок»?</p>
+                  <p className="mt-1">
+                    Форма шлёт запрос на <strong className="text-slate-900">{origin || "этот сайт"}</strong> — база должна быть
+                    настроена <em>там</em>. Команды <code className="rounded bg-white/80 px-1">db:push</code> /{" "}
+                    <code className="rounded bg-white/80 px-1">db:seed</code> у вас в терминале настраивают только ту БД,
+                    что в <strong className="text-slate-900">локальном</strong> <code className="rounded bg-white/80 px-1">.env</code>{" "}
+                    (обычно <code className="rounded bg-white/80 px-1">localhost</code>).
+                  </p>
+                  <p className="mt-2">
+                    Локальная проверка: запустите <code className="rounded bg-white/80 px-1">npm run dev</code> и откройте{" "}
+                    <strong className="text-slate-900">http://localhost:3000</strong> (и поднимите Postgres, например{" "}
+                    <code className="rounded bg-white/80 px-1">npm run db:docker</code>).
+                  </p>
+                  <p className="mt-2">
+                    Диагностика на <em>этом</em> домене:{" "}
+                    <Link href="/api/health" className="font-semibold text-violet-700 underline">
+                      /api/health
+                    </Link>{" "}
+                    — должно быть <code className="rounded bg-white/80 px-1">&quot;db&quot;:&quot;up&quot;</code>.
+                  </p>
+                </div>
+              )}
             <button
               type="submit"
               disabled={busy}
