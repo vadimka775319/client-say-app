@@ -3,7 +3,16 @@ name: CI and deploy
 on:
   push:
     branches: ["main"]
+    # Не запускаем CI/деплой, если в push только правила Cursor и прочие файлы для ассистента
+    paths-ignore:
+      - ".cursor/**"
+      - ".cursorrules"
+      - "AGENTS.md"
   pull_request:
+    paths-ignore:
+      - ".cursor/**"
+      - ".cursorrules"
+      - "AGENTS.md"
 
 env:
   DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ci_placeholder?schema=public

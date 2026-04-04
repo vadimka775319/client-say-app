@@ -1,7 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { computeBriefPoints, type BriefQuestionType } from "@/lib/mock-data";
+import type { FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { computeBriefPoints, partners, type BriefQuestionType } from "@/lib/mock-data";
+import { getBriefResponseCounts, incrementBriefResponseCount } from "@/lib/partner-brief-stats";
+import { seedRedemptionPoolForNewReward } from "@/lib/redemption-code-pool";
+import {
+  readPartnerUploadedRewards,
+  writePartnerUploadedRewards,
+  type PartnerUploadedReward,
+} from "@/lib/partner-uploaded-rewards";
 
 type DraftQuestion = { id: string; type: BriefQuestionType; prompt: string; options: string };
 type BriefItem = {
@@ -10,19 +19,26 @@ type BriefItem = {
   questions: DraftQuestion[];
   pointsForComplete: number;
   qrCode: string;
+  qrDataUrl?: string;
 };
+
+const PARTNER_REWARD_OWNER_ID = partners[0]?.id ?? "partner-local";
 
 function readPartnerStorage(): {
   companyName: string;
+  companyCity: string;
+  companyAddress: string;
   locations: number;
   briefs: BriefItem[];
   registeredUsers: number;
 } {
   if (typeof window === "undefined") {
-    return { companyName: "", locations: 0, briefs: [], registeredUsers: 0 };
+    return { companyName: "", companyCity: "", companyAddress: "", locations: 0, briefs: [], registeredUsers: 0 };
   }
 
   let companyName = "";
+  let companyCity = "";
+  let companyAddress = "";
   let locations = 0;
   let briefs: BriefItem[] = [];
   let registeredUsers = 0;
@@ -30,8 +46,15 @@ function readPartnerStorage(): {
   try {
     const rawProfile = localStorage.getItem("clientsay_partner_profile");
     if (rawProfile) {
-      const p = JSON.parse(rawProfile) as { companyName?: string; locations?: number };
+      const p = JSON.parse(rawProfile) as {
+        companyName?: string;
+        companyCity?: string;
+        companyAddress?: string;
+        locations?: number;
+      };
       companyName = p.companyName ?? "";
+      companyCity = p.companyCity ?? "";
+      companyAddress = p.companyAddress ?? "";
       locations = p.locations ?? 0;
     }
   } catch {
@@ -56,12 +79,33 @@ function readPartnerStorage(): {
     registeredUsers = 0;
   }
 
-  return { companyName, locations, briefs, registeredUsers };
+  return { companyName, companyCity, companyAddress, locations, briefs, registeredUsers };
+}
+
+function publicBriefUrl(id: string): string {
+  if (typeof window === "undefined") return `https://clientsay.ru/brief/${id}`;
+  return `${window.location.origin}/brief/${id}`;
+}
+
+async function makeQrDataUrl(url: string): Promise<string> {
+  return QRCode.toDataURL(url, { width: 240, margin: 2, errorCorrectionLevel: "M" });
+}
+
+function downloadDataUrl(dataUrl: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 export function PartnerWorkspace() {
   const [initialData] = useState(readPartnerStorage);
   const [companyName, setCompanyName] = useState(initialData.companyName);
+  const [companyCity, setCompanyCity] = useState(initialData.companyCity);
+  const [companyAddress, setCompanyAddress] = useState(initialData.companyAddress);
   const [locations, setLocations] = useState(initialData.locations);
   const [registeredUsers] = useState(initialData.registeredUsers);
   const [briefTitle, setBriefTitle] = useState("");
@@ -71,62 +115,252 @@ export function PartnerWorkspace() {
   ]);
   const [briefs, setBriefs] = useState<BriefItem[]>(initialData.briefs);
   const [message, setMessage] = useState("");
+  const [editingBriefId, setEditingBriefId] = useState<string | null>(null);
+  const [qrBusyId, setQrBusyId] = useState<string | null>(null);
+  const [statsTick, setStatsTick] = useState(0);
+  const [partnerRewards, setPartnerRewards] = useState<PartnerUploadedReward[]>([]);
+  const skipPartnerRewardsWrite = useRef(true);
+
+  const [editingPrizeId, setEditingPrizeId] = useState<string | null>(null);
+  const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null);
+
+  const [prizeForm, setPrizeForm] = useState({
+    title: "",
+    description: "",
+    giftTerms: "",
+    giftConditions: "",
+    imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80",
+    pointsCost: "150",
+    totalStock: "30",
+    stockLeft: "30",
+    startsAt: new Date().toISOString().slice(0, 10),
+    endsAt: "2026-12-31",
+  });
+
+  const responseCounts = useMemo(() => {
+    void statsTick;
+    return getBriefResponseCounts();
+  }, [statsTick]);
+
+  useEffect(() => {
+    const onStats = () => setStatsTick((t) => t + 1);
+    window.addEventListener("clientsay-brief-stats-changed", onStats);
+    return () => window.removeEventListener("clientsay-brief-stats-changed", onStats);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(
       "clientsay_partner_profile",
-      JSON.stringify({ companyName, locations, reviewsCount: 0, rating: 0 }),
+      JSON.stringify({ companyName, companyCity, companyAddress, locations, reviewsCount: 0, rating: 0 }),
     );
-  }, [companyName, locations]);
+    window.dispatchEvent(new Event("clientsay-partner-profile-changed"));
+  }, [companyName, companyCity, companyAddress, locations]);
 
   useEffect(() => {
     localStorage.setItem("clientsay_partner_briefs", JSON.stringify(briefs));
   }, [briefs]);
 
+  useEffect(() => {
+    setPartnerRewards(readPartnerUploadedRewards());
+  }, []);
+
+  useEffect(() => {
+    if (skipPartnerRewardsWrite.current) {
+      skipPartnerRewardsWrite.current = false;
+      return;
+    }
+    writePartnerUploadedRewards(partnerRewards);
+  }, [partnerRewards]);
+
+  const regenerateQr = useCallback(async (briefId: string) => {
+    setQrBusyId(briefId);
+    try {
+      const url = publicBriefUrl(briefId);
+      const qrDataUrl = await makeQrDataUrl(url);
+      setBriefs((list) => list.map((x) => (x.id === briefId ? { ...x, qrCode: url, qrDataUrl } : x)));
+      setMessage("QR-код сгенерирован.");
+    } catch {
+      setMessage("Ошибка генерации QR. Попробуйте кнопку «Сгенерировать QR» ещё раз.");
+    } finally {
+      setQrBusyId(null);
+    }
+  }, []);
+
+  /** При раскрытии карточки брифа генерируем QR (лениво), если картинки ещё нет */
+  useEffect(() => {
+    if (!expandedBriefId) return;
+    const b = briefs.find((x) => x.id === expandedBriefId);
+    if (b?.qrDataUrl) return;
+    void regenerateQr(expandedBriefId);
+  }, [expandedBriefId, briefs, regenerateQr]);
+
   const autoPoints = useMemo(() => computeBriefPoints(draftQuestions.length), [draftQuestions.length]);
   const pointsToSave = manualPoints > 0 ? manualPoints : autoPoints;
 
-  function addQuestion() {
+  const addQuestion = useCallback(() => {
     setDraftQuestions((q) => [...q, { id: `q-${Date.now()}`, type: "text", prompt: "", options: "" }]);
-  }
+  }, []);
 
-  function updateQuestion(id: string, patch: Partial<DraftQuestion>) {
+  const updateQuestion = useCallback((id: string, patch: Partial<DraftQuestion>) => {
     setDraftQuestions((q) => q.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-  }
+  }, []);
 
-  function removeQuestion(id: string) {
+  const removeQuestion = useCallback((id: string) => {
     setDraftQuestions((q) => (q.length > 1 ? q.filter((x) => x.id !== id) : q));
-  }
+  }, []);
 
-  function createBrief() {
+  const resetConstructor = useCallback(() => {
+    setBriefTitle("");
+    setManualPoints(0);
+    setDraftQuestions([{ id: `q-${Date.now()}`, type: "text", prompt: "", options: "" }]);
+    setEditingBriefId(null);
+  }, []);
+
+  const startEditBrief = useCallback((b: BriefItem) => {
+    setEditingBriefId(b.id);
+    setBriefTitle(b.title);
+    const auto = computeBriefPoints(b.questions.length);
+    setManualPoints(b.pointsForComplete !== auto ? b.pointsForComplete : 0);
+    setDraftQuestions(b.questions.map((q) => ({ ...q })));
+    setMessage("Редактирование: измените вопросы и нажмите «Сохранить бриф».");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  async function saveBrief() {
     const title = briefTitle.trim();
     if (!title) return setMessage("Введите название брифа.");
     if (!companyName.trim()) return setMessage("Сначала заполните название компании.");
     const validQuestions = draftQuestions.filter((q) => q.prompt.trim());
     if (!validQuestions.length) return setMessage("Добавьте хотя бы один вопрос.");
 
-    const id = `brief-${Date.now()}`;
-    const qrCode = `https://clientsay.ru/brief/${id}`;
-    const next: BriefItem = {
+    const id = editingBriefId ?? `brief-${Date.now()}`;
+    const url = publicBriefUrl(id);
+    let qrDataUrl: string | undefined;
+    try {
+      qrDataUrl = await makeQrDataUrl(url);
+    } catch {
+      setMessage("Не удалось сгенерировать QR. Проверьте соединение и попробуйте снова.");
+      return;
+    }
+
+    const nextItem: BriefItem = {
       id,
       title,
       questions: validQuestions,
       pointsForComplete: pointsToSave,
-      qrCode,
+      qrCode: url,
+      qrDataUrl,
     };
-    setBriefs((b) => [next, ...b]);
-    setBriefTitle("");
-    setManualPoints(0);
-    setDraftQuestions([{ id: `q-${Date.now()}`, type: "text", prompt: "", options: "" }]);
-    setMessage("Бриф создан. QR ссылка сгенерирована.");
+
+    if (editingBriefId) {
+      setBriefs((b) => b.map((x) => (x.id === editingBriefId ? nextItem : x)));
+      setMessage("Бриф обновлён, QR пересоздан.");
+    } else {
+      setBriefs((b) => [nextItem, ...b]);
+      setMessage("Бриф создан. Ниже — QR и ссылка; гости открывают страницу по QR.");
+    }
+    resetConstructor();
   }
+
+  function simulateResponse(briefId: string) {
+    incrementBriefResponseCount(briefId);
+    setStatsTick((t) => t + 1);
+    setMessage("Засчитан тестовый ответ (для графика). В продакшене счётчик пойдёт с формы брифа.");
+  }
+
+  function resetPrizeForm() {
+    setEditingPrizeId(null);
+    setPrizeForm({
+      title: "",
+      description: "",
+      giftTerms: "",
+      giftConditions: "",
+      imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80",
+      pointsCost: "150",
+      totalStock: "30",
+      stockLeft: "30",
+      startsAt: new Date().toISOString().slice(0, 10),
+      endsAt: "2026-12-31",
+    });
+  }
+
+  function startEditPrize(r: PartnerUploadedReward) {
+    setEditingPrizeId(r.id);
+    setPrizeForm({
+      title: r.title,
+      description: r.description,
+      giftTerms: r.giftTerms ?? "",
+      giftConditions: r.giftConditions ?? "",
+      imageUrl: r.imageUrl,
+      pointsCost: String(r.pointsCost),
+      totalStock: String(r.totalStock),
+      stockLeft: String(r.stockLeft),
+      startsAt: r.startsAt.slice(0, 10),
+      endsAt: r.endsAt.slice(0, 10),
+    });
+    setMessage("Редактирование приза — измените поля и нажмите «Сохранить приз».");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function submitPartnerPrize(e: FormEvent) {
+    e.preventDefault();
+    const total = Math.max(1, Number(prizeForm.totalStock) || 1);
+    const left = Math.min(Math.max(0, Number(prizeForm.stockLeft) || 0), total);
+    const base: PartnerUploadedReward = {
+      id: editingPrizeId ?? `pr-cabinet-${Date.now()}`,
+      partnerId: PARTNER_REWARD_OWNER_ID,
+      title: prizeForm.title.trim() || "Приз партнёра",
+      description: prizeForm.description.trim(),
+      giftTerms: prizeForm.giftTerms.trim() || undefined,
+      giftConditions: prizeForm.giftConditions.trim() || undefined,
+      imageUrl: prizeForm.imageUrl.trim() || "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80",
+      pointsCost: Number(prizeForm.pointsCost) || 0,
+      totalStock: total,
+      stockLeft: left,
+      startsAt: new Date(prizeForm.startsAt + "T00:00:00").toISOString(),
+      endsAt: new Date(prizeForm.endsAt + "T23:59:59").toISOString(),
+    };
+    if (editingPrizeId) {
+      setPartnerRewards((list) => list.map((x) => (x.id === editingPrizeId ? { ...base, id: editingPrizeId } : x)));
+      setMessage("Приз обновлён.");
+    } else {
+      setPartnerRewards((r) => [...r, base]);
+      seedRedemptionPoolForNewReward(base.id, base.totalStock);
+      setMessage("Приз добавлен на витрину (виден пользователям в личном кабинете).");
+    }
+    resetPrizeForm();
+  }
+
+  function onPrizeImageFile(file: File | null) {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result ?? "");
+      if (url) setPrizeForm((f) => ({ ...f, imageUrl: url }));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removePartnerPrize(id: string) {
+    if (!confirm("Удалить приз из витрины?")) return;
+    setPartnerRewards((r) => r.filter((x) => x.id !== id));
+    if (editingPrizeId === id) resetPrizeForm();
+  }
+
+  const maxResponses = Math.max(1, ...briefs.map((b) => responseCounts[b.id] ?? 0));
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-8 md:px-8">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-xs uppercase tracking-widest text-slate-500">Кабинет партнера</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">{companyName || "Новая компания"}</h1>
-        <p className="mt-2 text-sm text-slate-600">Заполните данные компании и создавайте брифы с QR.</p>
+        {companyCity.trim() || companyAddress.trim() ? (
+          <p className="mt-2 text-sm text-slate-600">
+            {[companyCity.trim(), companyAddress.trim()].filter(Boolean).join(" · ")}
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-slate-600">Заполните данные компании и создавайте брифы с QR.</p>
+        )}
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -160,11 +394,28 @@ export function PartnerWorkspace() {
             value={locations}
             onChange={(e) => setLocations(Number(e.target.value) || 0)}
           />
+          <input
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            placeholder="Город"
+            value={companyCity}
+            onChange={(e) => setCompanyCity(e.target.value)}
+          />
+          <input
+            className="sm:col-span-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            placeholder="Адрес компании (юридический или для гостей)"
+            value={companyAddress}
+            onChange={(e) => setCompanyAddress(e.target.value)}
+          />
         </div>
       </section>
 
       <section className="card">
-        <h2 className="h2">Конструктор брифа</h2>
+        <h2 className="h2">{editingBriefId ? "Редактирование брифа" : "Конструктор брифа"}</h2>
+        {editingBriefId && (
+          <p className="mb-3 text-xs text-amber-800">
+            Вы меняете бриф <strong>{editingBriefId}</strong>. После сохранения ссылка останется той же, QR пересоздастся.
+          </p>
+        )}
         <div className="space-y-3 text-sm">
           <input
             className="w-full rounded-lg border border-slate-200 px-3 py-2"
@@ -219,29 +470,319 @@ export function PartnerWorkspace() {
               placeholder="Баллы вручную (опционально)"
             />
           </div>
-          <button type="button" onClick={createBrief} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-            Сохранить бриф и сгенерировать QR
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void saveBrief()}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              {editingBriefId ? "Сохранить изменения и обновить QR" : "Сохранить бриф и сгенерировать QR"}
+            </button>
+            {editingBriefId && (
+              <button type="button" onClick={resetConstructor} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold">
+                Отменить редактирование
+              </button>
+            )}
+          </div>
           {message && <p className="text-xs text-violet-700">{message}</p>}
         </div>
       </section>
 
       <section className="card">
+        <h2 className="h2">Статистика ответов по брифам</h2>
+        <p className="mb-4 text-sm text-slate-600">
+          Демо: нажмите «+ ответ» у брифа, чтобы увидеть рост на графике. После подключения API счётчик будет расти с
+          реальных прохождений.
+        </p>
+        {briefs.length === 0 ? (
+          <p className="text-sm text-slate-500">Создайте бриф — здесь появится диаграмма.</p>
+        ) : (
+          <div className="space-y-3">
+            {briefs.map((b) => {
+              const n = responseCounts[b.id] ?? 0;
+              const pct = (n / maxResponses) * 100;
+              return (
+                <div key={b.id}>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                    <span className="max-w-[60%] truncate font-medium text-slate-800">{b.title}</span>
+                    <div className="flex items-center gap-2">
+                      <span>{n} отв.</span>
+                      <button
+                        type="button"
+                        className="rounded border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-800"
+                        onClick={() => simulateResponse(b.id)}
+                      >
+                        + ответ (демо)
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-1 h-3 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-3 rounded-full bg-gradient-to-r from-violet-500 to-sky-500 transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="card">
+        <h2 className="h2">Призы на витрину</h2>
+        <p className="mb-4 text-sm text-slate-600">
+          Загрузите акции для гостей (как в кабинете супер-админа): картинка по URL, баллы, тираж, даты. Призы появятся в
+          личном кабинете пользователя вместе с общими акциями.
+        </p>
+        <form onSubmit={submitPartnerPrize} className="space-y-3 rounded-xl border border-dashed border-violet-200 bg-violet-50/30 p-4 text-sm">
+          {editingPrizeId && (
+            <p className="text-xs text-amber-800">
+              Редактирование приза <strong>{editingPrizeId}</strong>. Сохраните изменения или отмените.
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="text-slate-600">Название</span>
+              <input
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                value={prizeForm.title}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, title: e.target.value }))}
+                placeholder="Например: Кофе в подарок"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-slate-600">Краткое описание подарка</span>
+              <textarea
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                rows={2}
+                value={prizeForm.description}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-slate-600">Сроки акции (для гостя)</span>
+              <textarea
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                rows={2}
+                value={prizeForm.giftTerms}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, giftTerms: e.target.value }))}
+                placeholder="Например: действует по будням до 31.12.2026"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-slate-600">Условия получения подарка</span>
+              <textarea
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                rows={2}
+                value={prizeForm.giftConditions}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, giftConditions: e.target.value }))}
+                placeholder="Например: один раз на пользователя, не суммируется с другими акциями"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-slate-600">Фото приза с устройства</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="mt-1 w-full text-xs"
+                onChange={(e) => onPrizeImageFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-slate-600">Или URL картинки</span>
+              <input
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                value={prizeForm.imageUrl}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, imageUrl: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="text-slate-600">Баллы</span>
+              <input
+                type="number"
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                value={prizeForm.pointsCost}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, pointsCost: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="text-slate-600">Тираж (всего)</span>
+              <input
+                type="number"
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                value={prizeForm.totalStock}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, totalStock: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="text-slate-600">Остаток (доступно сейчас)</span>
+              <input
+                type="number"
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                value={prizeForm.stockLeft}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, stockLeft: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="text-slate-600">Старт</span>
+              <input
+                type="date"
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                value={prizeForm.startsAt}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, startsAt: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="text-slate-600">Конец</span>
+              <input
+                type="date"
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5"
+                value={prizeForm.endsAt}
+                onChange={(e) => setPrizeForm((f) => ({ ...f, endsAt: e.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+              {editingPrizeId ? "Сохранить приз" : "Добавить приз"}
+            </button>
+            {editingPrizeId && (
+              <button type="button" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold" onClick={resetPrizeForm}>
+                Отменить редактирование
+              </button>
+            )}
+          </div>
+        </form>
+
+        {partnerRewards.length > 0 && (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {partnerRewards.map((r) => (
+              <article key={r.id} className="flex gap-3 rounded-xl border border-slate-200 p-3 text-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={r.imageUrl} alt="" className="h-20 w-24 shrink-0 rounded-lg object-cover" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-slate-900">{r.title}</p>
+                  <p className="text-xs text-violet-700">
+                    {r.pointsCost} б. · остаток {r.stockLeft}/{r.totalStock}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-violet-700"
+                      onClick={() => startEditPrize(r)}
+                    >
+                      Редактировать
+                    </button>
+                    <button type="button" className="text-xs font-semibold text-rose-600" onClick={() => removePartnerPrize(r.id)}>
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card">
         <h2 className="h2">Ваши брифы и QR</h2>
-        <div className="space-y-3 text-sm">
+        <p className="mb-3 text-sm text-slate-600">
+          Нажмите на бриф в списке — откроется карточка, автоматически сгенерируется QR-код (если его ещё нет). Оттуда же
+          можно скачать PNG, открыть ссылку и отредактировать вопросы.
+        </p>
+        <div className="space-y-2 text-sm">
           {briefs.length === 0 ? (
             <p className="text-slate-500">Пока нет брифов. Создайте первый бриф выше.</p>
           ) : (
-            briefs.map((b) => (
-              <div key={b.id} className="rounded-xl border border-slate-200 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <strong>{b.title}</strong>
-                  <span className="text-violet-700">{b.pointsForComplete} б.</span>
+            briefs.map((b) => {
+              const open = expandedBriefId === b.id;
+              return (
+                <div key={b.id} className="overflow-hidden rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 bg-slate-50/80 px-4 py-3 text-left transition hover:bg-slate-100"
+                    onClick={() => setExpandedBriefId((id) => (id === b.id ? null : b.id))}
+                  >
+                    <span>
+                      <strong className="text-slate-900">{b.title}</strong>
+                      <span className="ml-2 text-xs text-slate-500">
+                        {b.questions.length} вопр. · {b.pointsForComplete} б.
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-slate-400">{open ? "▼" : "▶"}</span>
+                  </button>
+                  {open && (
+                    <div className="border-t border-slate-200 p-4">
+                      <p className="break-all rounded bg-slate-100 px-2 py-1.5 font-mono text-[11px] text-slate-700">{b.qrCode}</p>
+                      <div className="mt-4 flex flex-wrap items-start gap-4">
+                        {b.qrDataUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={b.qrDataUrl} alt="" className="h-44 w-44 rounded-lg border border-slate-200 bg-white p-1" />
+                        ) : (
+                          <div className="flex h-44 w-44 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2 text-center text-xs text-slate-600">
+                            {qrBusyId === b.id ? (
+                              <span>Генерация QR…</span>
+                            ) : (
+                              <>
+                                <span>QR ещё не готов</span>
+                                <button
+                                  type="button"
+                                  className="rounded-lg bg-slate-900 px-2 py-1.5 font-semibold text-white"
+                                  onClick={() => void regenerateQr(b.id)}
+                                >
+                                  Сгенерировать QR
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        <div className="flex min-w-[200px] flex-1 flex-col gap-2">
+                          <button
+                            type="button"
+                            className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
+                            disabled={!b.qrDataUrl}
+                            onClick={() => b.qrDataUrl && downloadDataUrl(b.qrDataUrl, `qr-${b.id}.png`)}
+                          >
+                            Скачать QR (PNG)
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold"
+                            disabled={!b.qrDataUrl}
+                            onClick={() => b.qrDataUrl && window.open(b.qrDataUrl, "_blank", "noopener,noreferrer")}
+                          >
+                            Открыть QR-картинку
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-900"
+                            disabled={qrBusyId === b.id}
+                            onClick={() => void regenerateQr(b.id)}
+                          >
+                            {qrBusyId === b.id ? "Обновление…" : "Пересоздать QR"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold"
+                            onClick={() => window.open(b.qrCode, "_blank", "noopener,noreferrer")}
+                          >
+                            Открыть страницу брифа
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900"
+                            onClick={() => startEditBrief(b)}
+                          >
+                            Редактировать вопросы
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <p className="mt-1 text-xs text-slate-500">Вопросов: {b.questions.length}</p>
-                <p className="mt-1 rounded bg-slate-100 px-2 py-1 font-mono text-xs">{b.qrCode}</p>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>

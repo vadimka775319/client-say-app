@@ -29,6 +29,10 @@ export type Partner = {
   /** Демо: активность для супер-админа */
   lastActivityNote?: string;
   briefsCompleted30d?: number;
+  /** Город для списка в кабинете пользователя */
+  city?: string;
+  /** Как добраться / где оставить отзыв (QR только в точке) */
+  addressHint?: string;
 };
 
 export type UserProfile = {
@@ -190,6 +194,8 @@ export const partners: Partner[] = [
     reviewsCount: 1482,
     lastActivityNote: "12 брифов за 7 дней, 3 жалобы на скорость",
     briefsCompleted30d: 412,
+    city: "Москва",
+    addressHint: "ТЦ «Пульс», кофейня у центрального входа — QR для брифа на стойке заказа.",
   },
   {
     id: "p-2",
@@ -203,6 +209,8 @@ export const partners: Partner[] = [
     reviewsCount: 2901,
     lastActivityNote: "Рост QR-сканов +18% к прошлой неделе",
     briefsCompleted30d: 1205,
+    city: "Санкт-Петербург",
+    addressHint: "Невский пр., фирменные точки сети — табличка «Оставьте отзыв» и QR на столах.",
   },
 ];
 

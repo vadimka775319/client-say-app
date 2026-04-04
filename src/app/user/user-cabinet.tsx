@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   briefs,
   computeBriefPoints,
@@ -12,6 +12,10 @@ import {
   userFullName,
 } from "@/lib/mock-data";
 import { rewards as allRewards } from "@/lib/mock-data";
+import { incrementBriefResponseCount } from "@/lib/partner-brief-stats";
+import { readPartnerUploadedRewards, type PartnerUploadedReward } from "@/lib/partner-uploaded-rewards";
+import { ensureRedemptionPool, takePooledRedemptionCode } from "@/lib/redemption-code-pool";
+import { decrementStockAfterRedeem, getEffectiveStockLeft } from "@/lib/reward-stock";
 
 function makeRedemptionCode(rewardId: string) {
   const part = rewardId.replace(/\W/g, "").toUpperCase().slice(-4).padStart(4, "0");
@@ -65,24 +69,52 @@ export function UserCabinet() {
   const [email, setEmail] = useState(initialProfile.email);
   const [phone, setPhone] = useState(initialProfile.phone);
   const [points, setPoints] = useState(initialProfile.points);
-  const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [profileNotice, setProfileNotice] = useState<string | null>(null);
+  const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
   const [redeemOpen, setRedeemOpen] = useState<Reward | null>(null);
   const [issuedCode, setIssuedCode] = useState<string | null>(null);
+  const [partnerRewardsTick, setPartnerRewardsTick] = useState(0);
+  const [rewardsVersion, setRewardsVersion] = useState(0);
+  const skipPointsPersist = useRef(true);
+
+  useEffect(() => {
+    const onPartnerRewards = () => setPartnerRewardsTick((t) => t + 1);
+    window.addEventListener("clientsay-partner-rewards-changed", onPartnerRewards);
+    return () => window.removeEventListener("clientsay-partner-rewards-changed", onPartnerRewards);
+  }, []);
+
+  useEffect(() => {
+    if (skipPointsPersist.current) {
+      skipPointsPersist.current = false;
+      return;
+    }
+    localStorage.setItem(
+      "clientsay_user_profile",
+      JSON.stringify({ firstName, lastName, email, phone, points }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- сохраняем полный профиль при смене баллов (демо), поля формы из текущего рендера
+  }, [points]);
 
   const sortedRewards = useMemo(() => {
-    return [...allRewards].sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime());
-  }, []);
+    void partnerRewardsTick;
+    void rewardsVersion;
+    const extra = typeof window !== "undefined" ? readPartnerUploadedRewards() : [];
+    return [...allRewards, ...extra]
+      .map((r) => ({ ...r, stockLeft: getEffectiveStockLeft(r) }))
+      .sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime());
+  }, [partnerRewardsTick, rewardsVersion]);
 
   function saveProfile() {
     localStorage.setItem(
       "clientsay_user_profile",
       JSON.stringify({ firstName, lastName, email, phone, points }),
     );
-    setResetMsg("Профиль сохранен.");
+    setProfileNotice("Профиль и баллы сохранены в этом браузере.");
+    setPasswordNotice(null);
   }
 
   function requestPasswordReset() {
-    setResetMsg(
+    setPasswordNotice(
       "Запрос отправлен. Супер-админ увидит заявку и выдаст новый пароль (или ссылку). Самостоятельно удалить пароль из системы нельзя — только через администратора.",
     );
   }
@@ -95,8 +127,14 @@ export function UserCabinet() {
   function confirmRedeem() {
     if (!redeemOpen) return;
     if (points < redeemOpen.pointsCost) return;
+    const stock = getEffectiveStockLeft(redeemOpen);
+    if (stock <= 0) return;
+    ensureRedemptionPool(redeemOpen.id, stock);
+    const code = takePooledRedemptionCode(redeemOpen.id) ?? makeRedemptionCode(redeemOpen.id);
     setPoints((p) => p - redeemOpen.pointsCost);
-    setIssuedCode(makeRedemptionCode(redeemOpen.id));
+    decrementStockAfterRedeem(redeemOpen);
+    setIssuedCode(code);
+    setRewardsVersion((v) => v + 1);
   }
 
   function closeModal() {
@@ -172,6 +210,9 @@ export function UserCabinet() {
           >
             Сохранить профиль
           </button>
+          {profileNotice && (
+            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{profileNotice}</p>
+          )}
 
           <div className="mt-6 border-t border-slate-100 pt-4">
             <h3 className="text-sm font-bold text-slate-900">Пароль</h3>
@@ -185,22 +226,42 @@ export function UserCabinet() {
             >
               Запросить сброс пароля
             </button>
-            {resetMsg && <p className="mt-3 rounded-lg bg-violet-50 p-3 text-sm text-violet-900">{resetMsg}</p>}
+            {passwordNotice && <p className="mt-3 rounded-lg bg-violet-50 p-3 text-sm text-violet-900">{passwordNotice}</p>}
           </div>
         </section>
 
-        <section className="card flex flex-col justify-center bg-gradient-to-br from-violet-600 to-sky-600 text-white">
-          <p className="text-xs font-semibold uppercase tracking-widest text-white/80">Баланс</p>
-          <p className="mt-2 text-4xl font-extrabold">{points}</p>
-          <p className="text-sm text-white/90">баллов</p>
-          <p className="mt-4 text-xs text-white/80">
-            {userFullName({ ...user, firstName, lastName, email, phone, points })} · последний бриф:{" "}
-            {user.lastBriefAt
-              ? new Date(user.lastBriefAt).toLocaleString("ru-RU")
-              : "—"}
-          </p>
+        {/* Не используем класс .card: в globals он задаёт белый фон и перекрывает тёмную тему панели */}
+        <section className="flex min-h-[280px] flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900 p-[1.1rem] text-white shadow-lg">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Данные в профиле</p>
+            <dl className="mt-4 space-y-3 text-sm">
+              <div>
+                <dt className="text-xs text-slate-400">Имя</dt>
+                <dd className="mt-0.5 font-semibold text-white">{userFullName({ ...user, firstName, lastName, email, phone, points })}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Email</dt>
+                <dd className="mt-0.5 break-all font-medium text-white">{email?.trim() ? email : "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Телефон</dt>
+                <dd className="mt-0.5 text-slate-100">{phone?.trim() ? phone : "—"}</dd>
+              </div>
+            </dl>
+          </div>
+          <div className="mt-6 border-t border-slate-700 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Активные баллы</p>
+            <p className="mt-1 text-4xl font-extrabold tabular-nums text-white">{points}</p>
+            <p className="text-sm text-slate-300">баллов на счёте</p>
+            <p className="mt-3 text-xs text-slate-500">
+              Последний бриф:{" "}
+              {user.lastBriefAt ? new Date(user.lastBriefAt).toLocaleString("ru-RU") : "—"}
+            </p>
+          </div>
         </section>
       </div>
+
+      <PartnerDirectoryForUser />
 
       <section className="card">
         <h2 className="h2">Призы за баллы</h2>
@@ -213,6 +274,7 @@ export function UserCabinet() {
             const st = rewardStatus(reward);
             const active = st === "active";
             const can = active && points >= reward.pointsCost;
+            const extra = reward as PartnerUploadedReward;
             return (
               <article
                 key={reward.id}
@@ -227,7 +289,19 @@ export function UserCabinet() {
                       {reward.pointsCost} б.
                     </span>
                   </div>
-                  <p className="mt-2 flex-1 text-slate-600">{reward.description}</p>
+                  <p className="mt-2 flex-1 whitespace-pre-line text-slate-600">{reward.description}</p>
+                  {extra.giftTerms ? (
+                    <p className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-700">
+                      <span className="font-semibold text-slate-800">Сроки акции: </span>
+                      {extra.giftTerms}
+                    </p>
+                  ) : null}
+                  {extra.giftConditions ? (
+                    <p className="mt-2 rounded-lg bg-violet-50/80 p-2 text-xs text-slate-700">
+                      <span className="font-semibold text-violet-900">Условия подарка: </span>
+                      {extra.giftConditions}
+                    </p>
+                  ) : null}
                   <p className="mt-2 text-xs text-slate-500">
                     Осталось: <strong>{reward.stockLeft}</strong> из {reward.totalStock} · до{" "}
                     {new Date(reward.endsAt).toLocaleDateString("ru-RU")}
@@ -277,8 +351,9 @@ export function UserCabinet() {
               <>
                 <h3 className="text-lg font-bold text-slate-900">Подтвердить обмен</h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  Списываем <strong>{redeemOpen.pointsCost}</strong> баллов за «{redeemOpen.title}». После подтверждения
-                  вы получите код для показа в заведении.
+                  Списываем <strong>{redeemOpen.pointsCost}</strong> баллов за «{redeemOpen.title}». Вы получите{" "}
+                  <strong>одноразовый код выдачи</strong> из пула заведения (каждый обмен — новый код, как отдельная
+                  «строчка» в тираже).
                 </p>
                 <div className="mt-4 flex gap-2">
                   <button
@@ -307,7 +382,8 @@ export function UserCabinet() {
                   {issuedCode}
                 </p>
                 <p className="mt-3 text-xs text-slate-500">
-                  Сохраните скриншот. В продакшене код продублируем в email/SMS.
+                  Код уникален для этой выдачи — сотрудник списывает его один раз. Сохраните скриншот; в продакшене
+                  продублируем в email/SMS.
                 </p>
                 <button
                   type="button"
@@ -322,6 +398,90 @@ export function UserCabinet() {
         </div>
       )}
     </>
+  );
+}
+
+function PartnerDirectoryForUser() {
+  const [cabinet, setCabinet] = useState<{
+    brandName: string;
+    companyCity?: string;
+    companyAddress?: string;
+    locations?: number;
+  } | null>(null);
+
+  useEffect(() => {
+    function load() {
+      if (typeof window === "undefined") return;
+      try {
+        const raw = localStorage.getItem("clientsay_partner_profile");
+        if (!raw) {
+          setCabinet(null);
+          return;
+        }
+        const p = JSON.parse(raw) as {
+          companyName?: string;
+          companyCity?: string;
+          companyAddress?: string;
+          locations?: number;
+        };
+        if (!p.companyName?.trim()) {
+          setCabinet(null);
+          return;
+        }
+        setCabinet({
+          brandName: p.companyName,
+          companyCity: p.companyCity,
+          companyAddress: p.companyAddress,
+          locations: p.locations,
+        });
+      } catch {
+        setCabinet(null);
+      }
+    }
+    load();
+    window.addEventListener("storage", load);
+    window.addEventListener("focus", load);
+    window.addEventListener("clientsay-partner-profile-changed", load);
+    return () => {
+      window.removeEventListener("storage", load);
+      window.removeEventListener("focus", load);
+      window.removeEventListener("clientsay-partner-profile-changed", load);
+    };
+  }, []);
+
+  return (
+    <section className="card">
+      <h2 className="h2">Где оставить бриф</h2>
+      <p className="mb-4 text-sm text-slate-600">
+        Зарегистрированные партнёры. Пройти бриф и получить баллы можно <strong>в точке</strong> — там стоит QR. В личном
+        кабинете QR <strong>не открывается</strong>: так мы отделяем реальный визит от удалённого просмотра.
+      </p>
+      <ul className="space-y-4">
+        {partners.map((p) => (
+          <li key={p.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <strong className="text-slate-900">{p.brandName}</strong>
+              {p.city ? <span className="text-xs font-medium text-violet-800">{p.city}</span> : null}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{p.locations} точек</p>
+            {p.addressHint ? <p className="mt-2 text-slate-700">{p.addressHint}</p> : null}
+          </li>
+        ))}
+        {cabinet ? (
+          <li className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 text-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <strong className="text-slate-900">{cabinet.brandName}</strong>
+              {cabinet.companyCity?.trim() ? (
+                <span className="text-xs font-medium text-violet-800">{cabinet.companyCity}</span>
+              ) : null}
+            </div>
+            {cabinet.locations != null ? <p className="mt-1 text-xs text-slate-500">Точек: {cabinet.locations}</p> : null}
+            {cabinet.companyAddress?.trim() ? <p className="mt-2 text-slate-700">{cabinet.companyAddress}</p> : null}
+            <p className="mt-2 text-xs text-slate-500">Карточка из кабинета партнёра (этот браузер).</p>
+          </li>
+        ) : null}
+      </ul>
+    </section>
   );
 }
 
@@ -340,6 +500,7 @@ function QrFlowDemo({
   const pts = brief ? computeBriefPoints(brief.questions.length) : 0;
 
   function finishBrief() {
+    if (brief) incrementBriefResponseCount(brief.id);
     setPoints((p) => p + pts);
     setLastAward(pts);
     setStage("done");
