@@ -163,6 +163,25 @@ jobs:
           fi
           git reset --hard "origin/${BRANCH}"
 
+          # Docker Compose: обычно или группа docker, или sudo без пароля (NOPASSWD) для docker
+          DOCKER_COMPOSE_ARGS=()
+          if docker compose version >/dev/null 2>&1; then
+            if docker ps >/dev/null 2>&1; then
+              DOCKER_COMPOSE_ARGS=(docker compose)
+            elif sudo -n docker ps >/dev/null 2>&1; then
+              DOCKER_COMPOSE_ARGS=(sudo -n docker compose)
+            fi
+          elif command -v docker-compose >/dev/null 2>&1; then
+            if docker ps >/dev/null 2>&1; then
+              DOCKER_COMPOSE_ARGS=(docker-compose)
+            elif sudo -n docker ps >/dev/null 2>&1; then
+              DOCKER_COMPOSE_ARGS=(sudo -n docker-compose)
+            fi
+          fi
+          if [ ${#DOCKER_COMPOSE_ARGS[@]} -eq 0 ] && [ -f docker-compose.yml ]; then
+            echo "WARN: Docker найден, но нет прав (docker ps). Выполните на VPS: sudo usermod -aG docker $(whoami) и перелогиньте SSH, либо настройте sudo NOPASSWD для docker."
+          fi
+
           if [ -f .env ]; then
             set -a
             # shellcheck disable=SC1091
@@ -172,12 +191,12 @@ jobs:
 
           DEFAULT_PG_URL='postgresql://postgres:postgres@127.0.0.1:5432/client_say?schema=public'
 
-          if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
-            echo "=== docker compose: PostgreSQL (db) ==="
-            docker compose up -d db || echo "WARN: docker compose up failed — нужен внешний PostgreSQL в .env или Docker."
+          if [ ${#DOCKER_COMPOSE_ARGS[@]} -gt 0 ] && [ -f docker-compose.yml ]; then
+            echo "=== docker compose (${DOCKER_COMPOSE_ARGS[*]}): PostgreSQL (db) ==="
+            "${DOCKER_COMPOSE_ARGS[@]}" up -d db || echo "WARN: compose up failed — нужен внешний PostgreSQL в .env или исправьте права Docker."
             i=0
             while [ "$i" -lt 35 ]; do
-              if docker compose exec -T db pg_isready -U postgres -q 2>/dev/null; then
+              if "${DOCKER_COMPOSE_ARGS[@]}" exec -T db pg_isready -U postgres -q 2>/dev/null; then
                 echo "Postgres готов."
                 break
               fi
@@ -238,7 +257,19 @@ jobs:
               sleep 3
             done
             if [ "$PUSH_OK" != 1 ]; then
-              echo "::error::prisma db push не выполнен — онлайн-вход/регистрация не заработают. На VPS: docker compose up -d db, пользователь в группе docker, корректный DATABASE_URL в .env." >&2
+              echo "=== Последняя попытка prisma db push (полный вывод) ==="
+              npx prisma db push 2>&1 || true
+              echo "=== DATABASE_URL (без пароля): host из строки ==="
+              node -e "const u=process.env.DATABASE_URL||''; try{const x=new URL(u.replace(/^postgresql:/,'http:')); console.log('host=',x.hostname,'port=',x.port||'5432','db=',x.pathname);}catch(e){console.log('parse err',e.message)}" 2>/dev/null || true
+              if [ ${#DOCKER_COMPOSE_ARGS[@]} -gt 0 ]; then
+                echo "=== docker compose ps ==="
+                "${DOCKER_COMPOSE_ARGS[@]}" ps 2>&1 || true
+                echo "=== docker compose logs db (хвост) ==="
+                "${DOCKER_COMPOSE_ARGS[@]}" logs db --tail 50 2>&1 || true
+              else
+                echo "=== Docker Compose не вызывался (нет docker или нет прав docker ps / sudo -n docker ps) ==="
+              fi
+              echo "::error::prisma db push не выполнен. На VPS: 1) sudo usermod -aG docker ДЕПЛОЙ_ЮЗЕР && newgrp docker (или перелогин SSH) 2) cd $APP_DIR && docker compose up -d db 3) верный DATABASE_URL в .env для этой машины." >&2
               exit 1
             fi
             npm run db:seed
