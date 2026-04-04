@@ -312,3 +312,26 @@ jobs:
           fi
           echo "==== DEPLOY_DONE (health OK) ===="
           ENDDEPLOY
+
+      # С интернета (как у пользователей): опционально, секрет PUBLIC_SITE_URL = https://ваш-домен.ru
+      - name: Проверка снаружи /api/health
+        env:
+          PUBLIC_SITE_URL: ${{ secrets.PUBLIC_SITE_URL }}
+        run: |
+          set -euo pipefail
+          BASE="${PUBLIC_SITE_URL:-}"
+          BASE="${BASE%/}"
+          if [ -z "$BASE" ]; then
+            echo "::notice::Секрет PUBLIC_SITE_URL не задан — внешняя проверка пропущена. Уже проверено на VPS: 127.0.0.1/api/health. Добавьте PUBLIC_SITE_URL для smoke-теста с интернета."
+            exit 0
+          fi
+          URL="${BASE}/api/health"
+          echo "Запрос: $URL"
+          RESP="$(curl -sfSL --max-time 60 --retry 3 --retry-delay 5 "$URL")" || {
+            echo "::error::Не ответил $URL (nginx/HTTPS/фаервол?)"
+            exit 1
+          }
+          echo "$RESP"
+          echo "$RESP" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true' || { echo "::error::В ответе нет ok:true"; exit 1; }
+          echo "$RESP" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' || { echo "::error::В ответе нет db:up"; exit 1; }
+          echo "::notice::Публичная проверка OK: $URL"

@@ -74,7 +74,7 @@ npm run dev
 - `src/app/api/auth/` — вход, выход, регистрация в БД + httpOnly JWT
 - `src/app/components/cabinet-shell.tsx` — общая шапка кабинетов (навигация, выход)
 - `src/proxy.ts` — защита кабинетов по роли до отдачи страницы (Next.js 16: бывший `middleware`)
-- `.github/workflows/deploy.yml` — CI (lint, typecheck, build), затем деплой на VPS по push в `main`
+- `.github/workflows/deploy.yml` — CI (lint, typecheck, build), деплой на VPS по push в `main`, на сервере проверка `127.0.0.1/api/health`; опционально секрет **`PUBLIC_SITE_URL`** (`https://ваш-домен.ru`) — после деплоя GitHub запросит с интернета `/api/health` и упадёт, если сайт или БД недоступны снаружи
 - `src/app/admin/page.tsx` — супер-админ
 - `src/app/partner/page.tsx` — партнер
 - `src/app/user/page.tsx` — пользователь
