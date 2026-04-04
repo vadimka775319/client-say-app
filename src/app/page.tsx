@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DeployBadge } from "@/app/components/deploy-badge";
 import { DemoQrCard } from "@/app/components/demo-qr-card";
 import { partnerPlans, partners, rewards, users } from "@/lib/mock-data";
 import { coverageCities } from "@/lib/site-config";
@@ -859,6 +860,7 @@ export default function Home() {
               <p>
                   © 2024-2026 {BRAND_NAME}. Все права защищены.
               </p>
+              <DeployBadge />
               <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                 <Link href="/privacy" className="hover:text-slate-300">
                   Политика конфиденциальности

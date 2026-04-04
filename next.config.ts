@@ -22,6 +22,7 @@ const nextConfig: NextConfig = {
       { source: "/admin", headers: [{ key: "Cache-Control", value: noStore }] },
       { source: "/admin/:path*", headers: [{ key: "Cache-Control", value: noStore }] },
       { source: "/api/health", headers: [{ key: "Cache-Control", value: "no-store, must-revalidate" }] },
+      { source: "/health", headers: [{ key: "Cache-Control", value: "private, no-store, must-revalidate" }] },
     ];
   },
 };
