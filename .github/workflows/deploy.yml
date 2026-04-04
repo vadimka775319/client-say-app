@@ -44,6 +44,8 @@ jobs:
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+      # Необязательно: если приложение не в /var/www/client-say-app (например /home/ubuntu/app)
+      VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
     steps:
       - name: Prepare SSH key and known_hosts
         run: |
@@ -75,16 +77,18 @@ jobs:
       - name: Deploy on VPS
         run: |
           set -euo pipefail
+          DEPLOY_DIR="${VPS_APP_DIR:-/var/www/client-say-app}"
+          echo "Deploy directory on VPS: $DEPLOY_DIR"
           ssh -i ~/.ssh/vps_deploy_key \
             -o IdentitiesOnly=yes \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             "${VPS_USER}@${VPS_HOST}" \
-            bash -s <<'ENDDEPLOY'
+            "export CLIENTSAY_APP_DIR=$(printf '%q' "$DEPLOY_DIR"); bash -s" <<'ENDDEPLOY'
           set -euo pipefail
           echo "==== DEPLOY_START $(date -u +%H:%M:%SZ) ===="
           export NODE_ENV=production
-          APP_DIR="/var/www/client-say-app"
+          APP_DIR="${CLIENTSAY_APP_DIR}"
           REPO_URL="https://github.com/vadimka775319/client-say-app.git"
 
           set +eu
@@ -301,12 +305,14 @@ jobs:
           HEALTH_OK=0
           for h in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
             if command -v curl >/dev/null 2>&1; then
-              if curl -sfS "http://127.0.0.1:${PORT}/api/health" 2>/dev/null | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"'; then
+              H="$(curl -sfS "http://127.0.0.1:${PORT}/api/health" 2>/dev/null || true)"
+              if echo "$H" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' && echo "$H" | grep -q '"deploy"'; then
                 HEALTH_OK=1
                 break
               fi
             elif command -v wget >/dev/null 2>&1; then
-              if wget -qO- "http://127.0.0.1:${PORT}/api/health" 2>/dev/null | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"'; then
+              H="$(wget -qO- "http://127.0.0.1:${PORT}/api/health" 2>/dev/null || true)"
+              if echo "$H" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' && echo "$H" | grep -q '"deploy"'; then
                 HEALTH_OK=1
                 break
               fi
@@ -319,10 +325,14 @@ jobs:
             sleep 2
           done
           if [ "$HEALTH_OK" != 1 ]; then
-            echo "::error::После деплоя http://127.0.0.1:${PORT}/api/health не вернул db:up. Смотрите: pm2 logs client-say-app и .env (DATABASE_URL, AUTH_SECRET)." >&2
+            echo "::error::После деплоя http://127.0.0.1:${PORT}/api/health не вернул db:up и/или нет поля deploy (крутится старая сборка или не тот порт). Смотрите: pm2 describe client-say-app, pm2 logs client-say-app, nginx upstream." >&2
             exit 1
           fi
-          echo "==== DEPLOY_DONE (health OK) ===="
+          if ! curl -sfS "http://127.0.0.1:${PORT}/api/deploy-meta" | grep -q '"gitShort"'; then
+            echo "::error::/api/deploy-meta не отдал ожидаемый JSON — сборка без route или не тот процесс." >&2
+            exit 1
+          fi
+          echo "==== DEPLOY_DONE (health + deploy-meta OK) ===="
           ENDDEPLOY
 
       # С интернета (как у пользователей): опционально, секрет PUBLIC_SITE_URL = https://ваш-домен.ru
@@ -346,4 +356,5 @@ jobs:
           echo "$RESP"
           echo "$RESP" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true' || { echo "::error::В ответе нет ok:true"; exit 1; }
           echo "$RESP" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' || { echo "::error::В ответе нет db:up"; exit 1; }
+          echo "$RESP" | grep -q '"deploy"' || { echo "::error::В публичном /api/health нет deploy — nginx отдаёт не ту сборку или кэш. Проверьте proxy_pass на порт PM2."; exit 1; }
           echo "::notice::Публичная проверка OK: $URL"
