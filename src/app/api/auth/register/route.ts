@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
+import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { dbUnreachableUserMessage } from "@/lib/db-unreachable-message";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 import { hashPassword, normalizeLogin } from "@/lib/auth-server";
 import { SESSION_COOKIE_NAME, sessionCookieOptions, signSession, type SessionRole } from "@/lib/auth-session";
-import { Role } from "@prisma/client";
 
 const registerBody = z.discriminatedUnion("role", [
   z.object({
@@ -24,6 +24,20 @@ const registerBody = z.discriminatedUnion("role", [
     lastName: z.string().optional().default(""),
   }),
 ]);
+
+function duplicateRegisterMessage(e: unknown): string {
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+    const raw = e.meta?.target;
+    const fields = Array.isArray(raw) ? raw.map(String) : raw != null ? [String(raw)] : [];
+    if (fields.some((f) => f === "phone")) {
+      return "Этот телефон уже зарегистрирован в системе. Войдите с тем же паролем или укажите другой номер.";
+    }
+    if (fields.some((f) => f === "email")) {
+      return "Этот email уже занят. Войдите или укажите другой адрес.";
+    }
+  }
+  return "Такой email или телефон уже зарегистрирован.";
+}
 
 export async function POST(req: Request) {
   let json: unknown;
@@ -61,7 +75,7 @@ export async function POST(req: Request) {
           role: Role.USER,
         },
       });
-      return jsonWithSession(user.id, "USER", { ok: true as const, role: "USER" as const });
+      return jsonWithSession(req, user.id, "USER", { ok: true as const, role: "USER" as const });
     }
 
     const { email, phone } = normalizeLogin(data.login);
@@ -90,12 +104,12 @@ export async function POST(req: Request) {
       },
     });
 
-    return jsonWithSession(user.id, "PARTNER", { ok: true as const, role: "PARTNER" as const });
+    return jsonWithSession(req, user.id, "PARTNER", { ok: true as const, role: "PARTNER" as const });
   } catch (e: unknown) {
     const code = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
     if (code === "P2002") {
       return NextResponse.json(
-        { error: { code: "duplicate", message: "Такой email или телефон уже зарегистрирован" } },
+        { error: { code: "duplicate", message: duplicateRegisterMessage(e) } },
         { status: 409 },
       );
     }
@@ -118,9 +132,9 @@ export async function POST(req: Request) {
   }
 }
 
-async function jsonWithSession(userId: string, role: SessionRole, body: Record<string, unknown>) {
+async function jsonWithSession(req: Request, userId: string, role: SessionRole, body: Record<string, unknown>) {
   const token = await signSession(userId, role);
   const res = NextResponse.json(body);
-  res.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
+  res.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
   return res;
 }

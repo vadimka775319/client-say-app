@@ -35,12 +35,23 @@ export async function verifySession(token: string): Promise<{ userId: string; ro
 
 export const SESSION_COOKIE_NAME = COOKIE_NAME;
 
-export function sessionCookieOptions() {
-  return {
+/**
+ * За nginx без X-Forwarded-Proto сессия «не логинилась»: в production всегда ставился Secure=true,
+ * а браузер по HTTP не сохраняет такую cookie. Учитываем заголовок прокси.
+ */
+export function sessionCookieOptions(req?: Request) {
+  const base = {
     httpOnly: true as const,
-    secure: env.NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   };
+  if (env.NODE_ENV !== "production") {
+    return { ...base, secure: false as const };
+  }
+  const proto = req?.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  if (proto === "http") {
+    return { ...base, secure: false as const };
+  }
+  return { ...base, secure: true as const };
 }
