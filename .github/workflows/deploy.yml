@@ -238,8 +238,10 @@ jobs:
               sleep 3
             done
             if [ "$PUSH_OK" != 1 ]; then
-              echo "::warning::prisma db push не выполнен — на VPS нет Postgres на DATABASE_URL или БД ещё не поднялась. Деплой продолжается; проверьте docker compose и .env."
+              echo "::error::prisma db push не выполнен — онлайн-вход/регистрация не заработают. На VPS: docker compose up -d db, пользователь в группе docker, корректный DATABASE_URL в .env." >&2
+              exit 1
             fi
+            npm run db:seed
             npm run build
           )
 
@@ -251,5 +253,31 @@ jobs:
           pm2 delete client-say-app 2>/dev/null || true
           pm2 start ecosystem.config.cjs
           pm2 save
-          echo "==== DEPLOY_DONE ===="
+
+          PORT="${PORT:-3000}"
+          HEALTH_OK=0
+          for h in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+            if command -v curl >/dev/null 2>&1; then
+              if curl -sfS "http://127.0.0.1:${PORT}/api/health" 2>/dev/null | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"'; then
+                HEALTH_OK=1
+                break
+              fi
+            elif command -v wget >/dev/null 2>&1; then
+              if wget -qO- "http://127.0.0.1:${PORT}/api/health" 2>/dev/null | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"'; then
+                HEALTH_OK=1
+                break
+              fi
+            else
+              echo "WARN: нет curl/wget — пропускаю проверку /api/health"
+              HEALTH_OK=1
+              break
+            fi
+            echo "Ожидание /api/health (db up)… $h/15"
+            sleep 2
+          done
+          if [ "$HEALTH_OK" != 1 ]; then
+            echo "::error::После деплоя http://127.0.0.1:${PORT}/api/health не вернул db:up. Смотрите: pm2 logs client-say-app и .env (DATABASE_URL, AUTH_SECRET)." >&2
+            exit 1
+          fi
+          echo "==== DEPLOY_DONE (health OK) ===="
           ENDDEPLOY
