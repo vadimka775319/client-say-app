@@ -187,27 +187,19 @@ jobs:
             done
           fi
 
-          # Контейнер db из репозитория → рабочий URL, если в .env пусто или плейсхолдер
-          if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ] && docker compose ps -q db 2>/dev/null | grep -q .; then
-            case "${DATABASE_URL:-}" in
-              ""|*"build_placeholder"*|*"ci_placeholder"*)
-                export DATABASE_URL="$DEFAULT_PG_URL"
-                echo "INFO: DATABASE_URL установлен на Docker Postgres (client_say)."
-                if [ -f .env ]; then
-                  if grep -q '^DATABASE_URL=' .env; then
-                    grep -v '^DATABASE_URL=' .env > .env.tmp && mv .env.tmp .env
-                  fi
-                  printf '%s\n' "DATABASE_URL=\"${DEFAULT_PG_URL}\"" >> .env
-                else
-                  printf '%s\n' "DATABASE_URL=\"${DEFAULT_PG_URL}\"" > .env
-                  chmod 600 .env 2>/dev/null || true
-                fi
-                set -a
-                # shellcheck disable=SC1091
-                . ./.env
-                set +a
-                ;;
-            esac
+          # Пустой/плейсхолдерный URL → как в docker-compose (Postgres на 127.0.0.1:5432)
+          if [[ -z "${DATABASE_URL:-}" || "${DATABASE_URL}" == *"ci_placeholder"* || "${DATABASE_URL}" == *"build_placeholder"* ]]; then
+            export DATABASE_URL="$DEFAULT_PG_URL"
+            echo "WARN: DATABASE_URL подставлен под локальный Postgres (см. docker-compose.yml)."
+            if [ -f .env ] && grep -q '^DATABASE_URL=' .env 2>/dev/null; then
+              grep -v '^DATABASE_URL=' .env > .env.tmp && mv .env.tmp .env
+            fi
+            printf '%s\n' "DATABASE_URL=\"${DEFAULT_PG_URL}\"" >> .env
+            chmod 600 .env 2>/dev/null || true
+            set -a
+            # shellcheck disable=SC1091
+            [ -f .env ] && . ./.env
+            set +a
           fi
 
           # AUTH_SECRET обязателен для start-prod.cjs / JWT — дописываем в .env, если забыли
@@ -236,11 +228,18 @@ jobs:
             fi
             export AUTH_SECRET="${AUTH_SECRET:-ci-build-placeholder-secret-min-32-chars!!}"
             npm ci
-            if [[ -z "${DATABASE_URL:-}" || "${DATABASE_URL}" == *"ci_placeholder"* || "${DATABASE_URL}" == *"build_placeholder"* ]]; then
-              echo "ERROR: DATABASE_URL не задан или плейсхолдер. Укажите PostgreSQL в .env или поднимите: docker compose up -d db" >&2
-              exit 1
+            PUSH_OK=0
+            for t in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              if npx prisma db push; then
+                PUSH_OK=1
+                break
+              fi
+              echo "prisma db push не удался (попытка $t/12), пауза 3с..."
+              sleep 3
+            done
+            if [ "$PUSH_OK" != 1 ]; then
+              echo "::warning::prisma db push не выполнен — на VPS нет Postgres на DATABASE_URL или БД ещё не поднялась. Деплой продолжается; проверьте docker compose и .env."
             fi
-            npx prisma db push
             npm run build
           )
 
