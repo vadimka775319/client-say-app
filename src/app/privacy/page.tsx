@@ -1,19 +1,21 @@
 import Link from "next/link";
+import { BRAND_NAME } from "@/lib/brand";
 
 export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-3xl px-5 py-12 text-slate-800 md:px-8">
-      <p className="text-xs uppercase tracking-widest text-violet-600">ClientSay</p>
+      <p className="text-xs uppercase tracking-widest text-violet-600">{BRAND_NAME}</p>
       <h1 className="mt-2 text-3xl font-bold text-slate-900">Политика конфиденциальности</h1>
       <p className="mt-2 text-sm text-slate-500">Последнее обновление: {new Date().getFullYear()} год</p>
       <div className="prose prose-slate mt-8 max-w-none text-sm leading-relaxed">
         <p>
-          Настоящая Политика описывает, как Оператор сервиса ClientSay обрабатывает персональные данные при использовании
+          Настоящая Политика описывает, как Оператор сервиса {BRAND_NAME} обрабатывает персональные данные при
+          использовании
           веб-сайта и связанных функций (личные кабинеты партнёра и пользователя, формы брифов, обмен баллов).
         </p>
         <h2 className="mt-8 text-lg font-bold text-slate-900">1. Кто обрабатывает данные</h2>
         <p>
-          Оператором является владелец сервиса ClientSay (далее — «мы»). Контакт для вопросов по персональным данным:
+          Оператором является владелец сервиса {BRAND_NAME} (далее — «мы»). Контакт для вопросов по персональным данным:
           укажите здесь юридическое лицо, адрес и e-mail поддержки после регистрации компании.
         </p>
         <h2 className="mt-8 text-lg font-bold text-slate-900">2. Какие данные мы можем собирать</h2>
@@ -25,7 +27,7 @@ export default function PrivacyPage() {
         </ul>
         <h2 className="mt-8 text-lg font-bold text-slate-900">3. Цели обработки</h2>
         <ul className="list-disc space-y-2 pl-5">
-          <li>Предоставление доступа к ClientSay и кабинетам.</li>
+          <li>Предоставление доступа к {BRAND_NAME} и кабинетам.</li>
           <li>Обработка обратной связи по брифам и начисление баллов.</li>
           <li>Соблюдение антифрод-правил (например, ограничение частых прохождений у одного партнёра).</li>
           <li>Улучшение сервиса и поддержка пользователей.</li>

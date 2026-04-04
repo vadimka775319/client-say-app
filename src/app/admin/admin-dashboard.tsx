@@ -15,6 +15,7 @@ import {
   type UserProfile,
   userFullName,
 } from "@/lib/mock-data";
+import { BRAND_NAME } from "@/lib/brand";
 import {
   computeLandingStats,
   defaultSiteSettings,
@@ -621,7 +622,7 @@ function AdminRewardsPanel({
                   checked={editForm.fundedByPlatform}
                   onChange={(e) => setEditForm((f) => ({ ...f, fundedByPlatform: e.target.checked }))}
                 />
-                <span>Бюджет платформы ClientSay</span>
+                <span>Бюджет платформы {BRAND_NAME}</span>
               </label>
               {!editForm.fundedByPlatform && (
                 <label className="block sm:col-span-2">

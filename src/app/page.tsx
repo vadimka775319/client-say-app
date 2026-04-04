@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { DemoQrCard } from "@/app/components/demo-qr-card";
 import { partnerPlans, partners, rewards, users } from "@/lib/mock-data";
 import { coverageCities } from "@/lib/site-config";
+import { BRAND_NAME } from "@/lib/brand";
 import {
   computeLandingStats,
   defaultSiteSettings,
@@ -176,7 +177,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3 md:px-8">
           <Link href="/" className="flex items-center gap-2 no-underline">
             <span className="bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-2xl font-black tracking-tight text-transparent md:text-3xl">
-              ClientSay
+              {BRAND_NAME}
             </span>
           </Link>
           <button
@@ -475,7 +476,7 @@ export default function Home() {
 
         <section id="business" className="scroll-mt-20 border-b border-sky-100/60 bg-white py-16 md:py-24">
           <div className="mx-auto max-w-6xl px-5 md:px-8">
-            <h2 className="text-center text-3xl font-extrabold text-slate-900 md:text-4xl">Зачем ClientSay бизнесу</h2>
+            <h2 className="text-center text-3xl font-extrabold text-slate-900 md:text-4xl">Зачем {BRAND_NAME} бизнесу</h2>
             <p className="mx-auto mt-3 max-w-3xl text-center text-base leading-relaxed text-slate-600">
               Как у сильных игроков на рынке QR-обратной связи, только с акцентом на вашу модель: не обязательные отзывы
               на картах, а структурированный бриф, баллы и призы — чтобы гость дошёл до конца и честно ответил на
@@ -527,7 +528,7 @@ export default function Home() {
               недопонимания при выдаче приза.
             </p>
             <p className="mx-auto mt-6 max-w-2xl text-sm text-slate-500">
-              Мы сознательно отделяем модель ClientSay от агрегаторов карт: фокус — качественная обратная связь для
+              Мы сознательно отделяем модель {BRAND_NAME} от агрегаторов карт: фокус — качественная обратная связь для
               компании и честная мотивация гостя, а не только звезды на внешних площадках.
             </p>
           </div>
@@ -634,7 +635,7 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-5 md:px-8">
             <h2 className="text-center text-2xl font-extrabold text-slate-900 md:text-3xl">География</h2>
             <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-slate-600">
-              ClientSay подходит для сетей и одиночных точек в городах любого масштаба. Ниже — пример крупных городов; список
+              {BRAND_NAME} подходит для сетей и одиночных точек в городах любого масштаба. Ниже — пример крупных городов; список
               можно расширять под вашу сеть.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-2">
@@ -793,7 +794,7 @@ export default function Home() {
                   </li>
                   <li>
                     <a href="#business" className="hover:text-slate-200">
-                      Зачем ClientSay бизнесу
+                      Зачем {BRAND_NAME} бизнесу
                     </a>
                   </li>
                   <li>
@@ -861,7 +862,7 @@ export default function Home() {
             </div>
             <div className="mt-12 border-t border-slate-800 pt-8 text-center text-xs text-slate-500">
               <p>
-                  © 2024-2026 ClientSay. Все права защищены.
+                  © 2024-2026 {BRAND_NAME}. Все права защищены.
               </p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                 <Link href="/privacy" className="hover:text-slate-300">

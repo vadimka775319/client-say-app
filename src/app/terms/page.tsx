@@ -1,20 +1,21 @@
 import Link from "next/link";
+import { BRAND_NAME } from "@/lib/brand";
 
 export default function TermsPage() {
   return (
     <div className="mx-auto max-w-3xl px-5 py-12 text-slate-800 md:px-8">
-      <p className="text-xs uppercase tracking-widest text-violet-600">ClientSay</p>
+      <p className="text-xs uppercase tracking-widest text-violet-600">{BRAND_NAME}</p>
       <h1 className="mt-2 text-3xl font-bold text-slate-900">Пользовательское соглашение</h1>
       <p className="mt-2 text-sm text-slate-500">Последнее обновление: {new Date().getFullYear()} год</p>
       <div className="prose prose-slate mt-8 max-w-none text-sm leading-relaxed">
         <p>
-          Настоящее Пользовательское соглашение (далее — «Соглашение») регулирует отношения между Оператором сервиса
-          ClientSay и пользователем сервиса (физическим или юридическим лицом), включая партнёров и конечных
+          Настоящее Пользовательское соглашение (далее — «Соглашение») регулирует отношения между Оператором сервиса{" "}
+          {BRAND_NAME} и пользователем сервиса (физическим или юридическим лицом), включая партнёров и конечных
           пользователей витрины призов.
         </p>
         <h2 className="mt-8 text-lg font-bold text-slate-900">1. Предмет</h2>
         <p>
-          ClientSay предоставляет программный функционал для размещения QR-брифов, сбора структурированных ответов,
+          {BRAND_NAME} предоставляет программный функционал для размещения QR-брифов, сбора структурированных ответов,
           начисления баллов и управления призами в модели подписки партнёра (условия тарифов публикуются на сайте).
         </p>
         <h2 className="mt-8 text-lg font-bold text-slate-900">2. Регистрация и аккаунт</h2>
@@ -41,7 +42,7 @@ export default function TermsPage() {
         </p>
         <h2 className="mt-8 text-lg font-bold text-slate-900">6. Интеллектуальная собственность</h2>
         <p>
-          Элементы платформы ClientSay, включая дизайн и программный код, охраняются законом. Копирование без согласия
+          Элементы платформы {BRAND_NAME}, включая дизайн и программный код, охраняются законом. Копирование без согласия
           Оператора не допускается.
         </p>
         <h2 className="mt-8 text-lg font-bold text-slate-900">7. Изменения</h2>

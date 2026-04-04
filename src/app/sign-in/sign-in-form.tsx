@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState, type FormEvent } from "react";
 import type { SessionRole } from "@/lib/auth-session";
 import { demoAuth } from "@/lib/mock-data";
 import { cabinetPath, parseSessionRole, resolvePostLoginRedirect } from "@/lib/auth-routes";
+import { BRAND_NAME } from "@/lib/brand";
 import { PARTNER_CITY_OTHER, partnerRegistrationCities } from "@/lib/site-config";
 
 const ROLE_LABEL: Record<SessionRole, string> = {
@@ -42,7 +43,7 @@ export default function SignInForm() {
   const [error, setError] = useState("");
 
   const title = useMemo(() => {
-    if (!roleParam) return "Вход в ClientSay";
+    if (!roleParam) return `Вход в ${BRAND_NAME}`;
     return `Вход для ${ROLE_LABEL[roleParam]}`;
   }, [roleParam]);
 
@@ -200,7 +201,7 @@ export default function SignInForm() {
       <header className="border-b border-white/40 bg-white/60 px-5 py-3 backdrop-blur-md md:px-8">
         <div className="mx-auto flex max-w-lg items-center justify-between">
           <Link href="/" className="text-lg font-black tracking-tight text-transparent bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text">
-            ClientSay
+            {BRAND_NAME}
           </Link>
           <Link href="/" className="text-xs font-semibold text-slate-600 hover:text-violet-700">
             ← На главную

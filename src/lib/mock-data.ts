@@ -1,3 +1,5 @@
+import { BRAND_NAME } from "./brand";
+
 export type Role = "super_admin" | "partner" | "user";
 
 export type PartnerPlan = "trial" | "monthly" | "half_year" | "yearly";
@@ -429,6 +431,6 @@ export function daysLeft(dateISO: string) {
 }
 
 export function partnerLabel(id: string | null) {
-  if (!id) return "Платформа ClientSay";
+  if (!id) return `Платформа ${BRAND_NAME}`;
   return partners.find((p) => p.id === id)?.brandName ?? id;
 }
