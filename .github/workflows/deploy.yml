@@ -197,11 +197,8 @@ jobs:
             npm install -g pm2
           fi
 
-          if pm2 describe client-say-app >/dev/null 2>&1; then
-            pm2 reload ecosystem.config.cjs --update-env
-          else
-            pm2 start ecosystem.config.cjs
-          fi
+          pm2 delete client-say-app 2>/dev/null || true
+          pm2 start ecosystem.config.cjs
           pm2 save
           echo "==== DEPLOY_DONE ===="
           ENDDEPLOY
