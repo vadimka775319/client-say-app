@@ -204,12 +204,6 @@ export default function Home() {
                 Призы
               </a>
               <a
-                href="#business"
-                className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
-              >
-                Для бизнеса
-              </a>
-              <a
                 href="#placement"
                 className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
               >
@@ -266,13 +260,6 @@ export default function Home() {
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Призы
-              </a>
-              <a
-                href="#business"
-                className="rounded-xl px-3 py-2 font-medium text-slate-700 hover:bg-sky-50 hover:text-slate-900"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Для бизнеса
               </a>
               <a
                 href="#placement"

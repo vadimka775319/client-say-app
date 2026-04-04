@@ -169,6 +169,12 @@ jobs:
             set +a
           fi
 
+          if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
+            echo "=== docker compose: PostgreSQL (db) ==="
+            docker compose up -d db || echo "WARN: docker compose up failed — задайте внешний DATABASE_URL в .env или установите Docker."
+            sleep 3
+          fi
+
           (
             set -euo pipefail
             export NODE_ENV=production
@@ -191,7 +197,11 @@ jobs:
             npm install -g pm2
           fi
 
-          pm2 restart client-say-app || pm2 start npm --name client-say-app -- start
+          if pm2 describe client-say-app >/dev/null 2>&1; then
+            pm2 reload ecosystem.config.cjs --update-env
+          else
+            pm2 start ecosystem.config.cjs
+          fi
           pm2 save
           echo "==== DEPLOY_DONE ===="
           ENDDEPLOY

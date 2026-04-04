@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 import { hashPassword, normalizeLogin } from "@/lib/auth-server";
 import { SESSION_COOKIE_NAME, sessionCookieOptions, signSession, type SessionRole } from "@/lib/auth-session";
 import { Role } from "@prisma/client";
@@ -92,28 +92,21 @@ export async function POST(req: Request) {
     return jsonWithSession(user.id, "PARTNER", { ok: true as const, role: "PARTNER" as const });
   } catch (e: unknown) {
     const code = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
-    const message = e instanceof Error ? e.message : "";
     if (code === "P2002") {
       return NextResponse.json(
         { error: { code: "duplicate", message: "Такой email или телефон уже зарегистрирован" } },
         { status: 409 },
       );
     }
-    if (code === "P1001") {
+    if (isPrismaConnectionError(e)) {
       return NextResponse.json(
-        { error: { code: "db_unreachable", message: "База данных недоступна. Попробуйте позже." } },
+        { error: { code: "db_unreachable", message: "База данных недоступна. Проверьте конфигурацию сервера." } },
         { status: 503 },
       );
     }
     if (code === "P2021" || code === "P2022") {
       return NextResponse.json(
         { error: { code: "db_schema_outdated", message: "Сервер обновляется. Повторите регистрацию через 1-2 минуты." } },
-        { status: 503 },
-      );
-    }
-    if (message.includes("Can't reach database server") || message.includes("Environment variable not found: DATABASE_URL")) {
-      return NextResponse.json(
-        { error: { code: "db_unreachable", message: "База данных недоступна. Проверьте конфигурацию сервера." } },
         { status: 503 },
       );
     }

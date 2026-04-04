@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { findUserByLogin, verifyPassword } from "@/lib/auth-server";
+import { isPrismaConnectionError } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME, sessionCookieOptions, signSession } from "@/lib/auth-session";
 import type { SessionRole } from "@/lib/auth-session";
 
@@ -55,8 +56,7 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
-    const code = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
-    if (code === "P1001" || code === "P1012" || msg.includes("DATABASE_URL")) {
+    if (isPrismaConnectionError(e) || msg.includes("DATABASE_URL")) {
       return NextResponse.json(
         getPublicError("db_unreachable", "База данных недоступна. Проверьте DATABASE_URL на сервере."),
         { status: 503 },
