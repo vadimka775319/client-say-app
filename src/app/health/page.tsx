@@ -35,8 +35,10 @@ export default function HealthCheckPage() {
           {body}
         </pre>
         <p className="mt-4 text-xs text-slate-500">
-          Поле <code className="rounded bg-slate-200 px-1">deploy.gitShort</code> должно совпадать с последним коммитом
-          деплоя на GitHub. Если не совпадает — открыт другой хост или жёсткий кэш у провайдера.
+          Поле <code className="rounded bg-slate-200 px-1">deploy.gitShort</code> и{" "}
+          <code className="rounded bg-slate-200 px-1">deploy.source</code>: при <strong>source: &quot;file&quot;</strong> версия
+          взята из <code className="rounded bg-slate-200 px-1">/deploy-meta.json</code> на диске сервера (так надёжнее, чем
+          переменные в .env). Должно совпадать с последним коммитом на GitHub.
         </p>
       </div>
     </main>

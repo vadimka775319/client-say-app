@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# генерируется на VPS перед build (scripts/write-deploy-meta.cjs)
+public/deploy-meta.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*
