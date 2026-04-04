@@ -165,15 +165,68 @@ jobs:
 
           if [ -f .env ]; then
             set -a
+            # shellcheck disable=SC1091
             . ./.env
             set +a
           fi
 
+          DEFAULT_PG_URL='postgresql://postgres:postgres@127.0.0.1:5432/client_say?schema=public'
+
           if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
             echo "=== docker compose: PostgreSQL (db) ==="
-            docker compose up -d db || echo "WARN: docker compose up failed — задайте внешний DATABASE_URL в .env или установите Docker."
-            sleep 3
+            docker compose up -d db || echo "WARN: docker compose up failed — нужен внешний PostgreSQL в .env или Docker."
+            i=0
+            while [ "$i" -lt 35 ]; do
+              if docker compose exec -T db pg_isready -U postgres -q 2>/dev/null; then
+                echo "Postgres готов."
+                break
+              fi
+              i=$((i + 1))
+              echo "Ожидание Postgres... ($i/35)"
+              sleep 2
+            done
           fi
+
+          # Контейнер db из репозитория → рабочий URL, если в .env пусто или плейсхолдер
+          if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ] && docker compose ps -q db 2>/dev/null | grep -q .; then
+            case "${DATABASE_URL:-}" in
+              ""|*"build_placeholder"*|*"ci_placeholder"*)
+                export DATABASE_URL="$DEFAULT_PG_URL"
+                echo "INFO: DATABASE_URL установлен на Docker Postgres (client_say)."
+                if [ -f .env ]; then
+                  if grep -q '^DATABASE_URL=' .env; then
+                    grep -v '^DATABASE_URL=' .env > .env.tmp && mv .env.tmp .env
+                  fi
+                  printf '%s\n' "DATABASE_URL=\"${DEFAULT_PG_URL}\"" >> .env
+                else
+                  printf '%s\n' "DATABASE_URL=\"${DEFAULT_PG_URL}\"" > .env
+                  chmod 600 .env 2>/dev/null || true
+                fi
+                set -a
+                # shellcheck disable=SC1091
+                . ./.env
+                set +a
+                ;;
+            esac
+          fi
+
+          # AUTH_SECRET обязателен для start-prod.cjs / JWT — дописываем в .env, если забыли
+          if [ -f .env ] && ! grep -q '^AUTH_SECRET=' .env; then
+            if command -v openssl >/dev/null 2>&1; then
+              SEC="$(openssl rand -base64 48 | tr -d '\n\r')"
+              printf 'AUTH_SECRET="%s"\n' "$SEC" >> .env
+            else
+              echo 'AUTH_SECRET="ci-build-placeholder-secret-min-32-chars!!"' >> .env
+            fi
+            echo "INFO: в .env добавлен AUTH_SECRET (смените при необходимости)."
+          fi
+
+          set -a
+          if [ -f .env ]; then
+            # shellcheck disable=SC1091
+            . ./.env
+          fi
+          set +a
 
           (
             set -euo pipefail
@@ -182,13 +235,12 @@ jobs:
               export PATH="$NPM_PREFIX/bin:$PATH"
             fi
             export AUTH_SECRET="${AUTH_SECRET:-ci-build-placeholder-secret-min-32-chars!!}"
-            export DATABASE_URL="${DATABASE_URL:-postgresql://127.0.0.1:5432/build_placeholder?schema=public}"
             npm ci
             if [[ -z "${DATABASE_URL:-}" || "${DATABASE_URL}" == *"ci_placeholder"* || "${DATABASE_URL}" == *"build_placeholder"* ]]; then
-              echo "WARN: DATABASE_URL is placeholder/empty, skipping prisma db push on VPS."
-            else
-              npx prisma db push
+              echo "ERROR: DATABASE_URL не задан или плейсхолдер. Укажите PostgreSQL в .env или поднимите: docker compose up -d db" >&2
+              exit 1
             fi
+            npx prisma db push
             npm run build
           )
 
