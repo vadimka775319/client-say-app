@@ -284,8 +284,7 @@ jobs:
             echo "=== Prisma: db push OK — схема из schema.prisma применена к БД ==="
             npm run db:seed
             echo "=== Prisma: db seed OK — демо-аккаунты и приз обновлены (остаток призов не сбрасывается) ==="
-            node scripts/write-deploy-meta.cjs
-            echo "=== public/deploy-meta.json — версия для /api/health (не зависит от PM2/.env) ==="
+            echo "=== npm run build (внутри: write-deploy-meta + prisma generate + next build) ==="
             npm run build
           )
 

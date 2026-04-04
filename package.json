@@ -6,7 +6,7 @@
     "postinstall": "prisma generate",
     "env:init": "node scripts/env-init.cjs",
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "node scripts/write-deploy-meta.cjs && prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

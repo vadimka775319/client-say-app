@@ -35,10 +35,13 @@ export default function HealthCheckPage() {
           {body}
         </pre>
         <p className="mt-4 text-xs text-slate-500">
-          Поле <code className="rounded bg-slate-200 px-1">deploy.gitShort</code> и{" "}
-          <code className="rounded bg-slate-200 px-1">deploy.source</code>: при <strong>source: &quot;file&quot;</strong> версия
-          взята из <code className="rounded bg-slate-200 px-1">/deploy-meta.json</code> на диске сервера (так надёжнее, чем
-          переменные в .env). Должно совпадать с последним коммитом на GitHub.
+          Надёжная ссылка без статики:{" "}
+          <a href="/api/deploy-meta" className="font-semibold text-violet-700 underline">
+            /api/deploy-meta
+          </a>
+          . Поле <code className="rounded bg-slate-200 px-1">source</code>: <strong>file</strong> — из{" "}
+          <code className="rounded bg-slate-200 px-1">public/deploy-meta.json</code>, <strong>git</strong> — из{" "}
+          <code className="rounded bg-slate-200 px-1">git rev-parse</code> в каталоге приложения на сервере (если есть .git).
         </p>
       </div>
     </main>

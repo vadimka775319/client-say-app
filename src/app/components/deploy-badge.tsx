@@ -34,8 +34,12 @@ export function DeployBadge() {
     <p className="mt-3 text-[11px] text-slate-500">
       {line}
       {" · "}
+      <Link href="/api/deploy-meta" className="text-violet-300 underline hover:text-white">
+        /api/deploy-meta
+      </Link>
+      {" · "}
       <Link href="/health" className="text-violet-300 underline hover:text-white">
-        страница проверки /health
+        /health
       </Link>
     </p>
   );
