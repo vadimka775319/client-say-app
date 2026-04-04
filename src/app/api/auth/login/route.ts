@@ -25,28 +25,47 @@ export async function POST(req: Request) {
   }
 
   const { login, password, expectedRole } = parsed.data;
-  const user = await findUserByLogin(login);
-  if (!user) {
-    return NextResponse.json(getPublicError("credentials", "Неверный логин или пароль"), { status: 401 });
+
+  try {
+    const user = await findUserByLogin(login);
+    if (!user) {
+      return NextResponse.json(getPublicError("credentials", "Неверный логин или пароль"), { status: 401 });
+    }
+
+    const ok = await verifyPassword(password, user.passwordHash);
+    if (!ok) {
+      return NextResponse.json(getPublicError("credentials", "Неверный логин или пароль"), { status: 401 });
+    }
+
+    if (expectedRole != null && user.role !== expectedRole) {
+      return NextResponse.json(
+        getPublicError("wrong_role", "Этот аккаунт не подходит для выбранного кабинета"),
+        { status: 403 },
+      );
+    }
+
+    const token = await signSession(user.id, user.role as SessionRole);
+    const jar = await cookies();
+    jar.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
+
+    return NextResponse.json({ ok: true as const, role: user.role as SessionRole });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg.includes("AUTH_SECRET")) {
+      return NextResponse.json(
+        getPublicError("config", "На сервере не задан AUTH_SECRET (≥32 символов). Обратитесь к администратору."),
+        { status: 503 },
+      );
+    }
+    const code = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
+    if (code === "P1001") {
+      return NextResponse.json(
+        getPublicError("db_unreachable", "База данных недоступна. Проверьте DATABASE_URL на сервере."),
+        { status: 503 },
+      );
+    }
+    return NextResponse.json(getPublicError("internal", "Ошибка сервера при входе. Попробуйте позже."), { status: 500 });
   }
-
-  const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) {
-    return NextResponse.json(getPublicError("credentials", "Неверный логин или пароль"), { status: 401 });
-  }
-
-  if (expectedRole != null && user.role !== expectedRole) {
-    return NextResponse.json(
-      getPublicError("wrong_role", "Этот аккаунт не подходит для выбранного кабинета"),
-      { status: 403 },
-    );
-  }
-
-  const token = await signSession(user.id, user.role as SessionRole);
-  const jar = await cookies();
-  jar.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
-
-  return NextResponse.json({ ok: true as const, role: user.role as SessionRole });
 }
 
 function getPublicError(code: string, message: string) {
