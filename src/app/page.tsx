@@ -175,7 +175,7 @@ export default function Home() {
 
       <header className="sticky top-0 z-40 border-b border-sky-100/80 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3 md:px-8">
-          <Link href="/" className="flex items-center gap-2 no-underline">
+          <Link href="/" className="flex shrink-0 items-center gap-2 no-underline">
             <span className="bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-2xl font-black tracking-tight text-transparent md:text-3xl">
               {BRAND_NAME}
             </span>
@@ -189,61 +189,61 @@ export default function Home() {
           >
             {mobileMenuOpen ? "Закрыть" : "Меню"}
           </button>
-          <div className="hidden items-center gap-6 md:flex">
-            <nav className="flex items-center gap-1 text-sm">
+          <div className="hidden min-w-0 flex-1 items-center justify-end gap-3 md:flex md:flex-nowrap lg:gap-6">
+            <nav className="flex min-w-0 flex-nowrap items-center gap-0.5 text-sm lg:gap-1">
               <a
                 href="#how"
-                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+                className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
               >
                 Как работает
               </a>
               <a
                 href="#prizes"
-                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+                className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
               >
                 Призы
               </a>
               <a
                 href="#business"
-                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+                className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
               >
                 Для бизнеса
               </a>
               <a
                 href="#placement"
-                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+                className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
               >
                 Где разместить QR
               </a>
               <a
                 href="#pricing"
-                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+                className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
               >
                 Тарифы
               </a>
               <a
                 href="#materials"
-                className="rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
+                className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-sky-50 hover:text-slate-900"
               >
                 Материалы
               </a>
             </nav>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 flex-nowrap items-center gap-2">
               <Link
                 href="/partner"
-                className="rounded-full border border-sky-200 bg-white px-4 py-2 font-semibold text-slate-800 shadow-sm transition-all hover:border-violet-200 hover:shadow-md"
+                className="whitespace-nowrap rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition-all hover:border-violet-200 hover:shadow-md"
               >
                 Кабинет партнёра
               </Link>
               <Link
                 href="/user"
-                className="rounded-full border border-transparent px-4 py-2 font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                className="whitespace-nowrap rounded-full border border-transparent px-4 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
               >
                 Личный кабинет
               </Link>
               <Link
                 href="/sign-in"
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-slate-800"
+                className="whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-slate-800"
               >
                 Вход
               </Link>
@@ -732,16 +732,9 @@ export default function Home() {
             </p>
             <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
               <a
-                href={`tel:${siteSettings.phoneTel}`}
-                onClick={() => trackEvent("footer_cta_click", { placement: "footer_cta", action: "phone" })}
-                className="inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5"
-              >
-                Позвонить: {siteSettings.phoneDisplay}
-              </a>
-              <a
                 href={`mailto:${siteSettings.emailInfo}`}
                 onClick={() => trackEvent("footer_cta_click", { placement: "footer_cta", action: "email" })}
-                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-800 hover:border-violet-200"
+                className="inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5"
               >
                 Написать: {siteSettings.emailInfo}
               </a>
@@ -756,27 +749,29 @@ export default function Home() {
                 <p className="text-xs font-bold uppercase tracking-widest text-violet-400/90">Связь с нами</p>
                 <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-300">{siteSettings.brandLine}</p>
                 <div className="mt-6 rounded-2xl border border-slate-800/80 bg-slate-900/50 p-5">
-                  {siteSettings.phoneTel ? (
-                    <a
-                      href={`tel:${siteSettings.phoneTel}`}
-                      className="block whitespace-nowrap text-xl font-bold tabular-nums tracking-tight text-white transition-colors hover:text-violet-300 sm:text-2xl md:text-3xl"
-                    >
-                      {siteSettings.phoneDisplay}
-                    </a>
-                  ) : (
-                    <p className="whitespace-nowrap text-xl font-bold tabular-nums text-white sm:text-2xl md:text-3xl">
-                      {siteSettings.phoneDisplay}
-                    </p>
-                  )}
-                  <p className="mt-2 text-sm text-slate-500">{siteSettings.schedule}</p>
-                  <div className="mt-4 h-px w-full bg-slate-800" />
-                  <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">E-mail</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">E-mail</p>
                   <a
                     href={`mailto:${siteSettings.emailInfo}`}
-                    className="mt-1 inline-block text-base font-semibold text-violet-400 transition-colors hover:text-violet-300"
+                    className="mt-1 inline-block break-all text-lg font-semibold text-violet-400 transition-colors hover:text-violet-300 sm:text-xl"
                   >
                     {siteSettings.emailInfo}
                   </a>
+                  <p className="mt-4 text-sm text-slate-500">{siteSettings.schedule}</p>
+                  {(siteSettings.phoneTel?.trim() || siteSettings.phoneDisplay?.trim()) ? (
+                    <>
+                      <div className="mt-4 h-px w-full bg-slate-800" />
+                      {siteSettings.phoneTel ? (
+                        <a
+                          href={`tel:${siteSettings.phoneTel}`}
+                          className="mt-4 block text-lg font-bold tabular-nums tracking-tight text-white transition-colors hover:text-violet-300"
+                        >
+                          {siteSettings.phoneDisplay || siteSettings.phoneTel}
+                        </a>
+                      ) : (
+                        <p className="mt-4 text-lg font-bold text-white">{siteSettings.phoneDisplay}</p>
+                      )}
+                    </>
+                  ) : null}
                 </div>
               </div>
               <div id="sitemap">

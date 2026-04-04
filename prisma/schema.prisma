@@ -126,9 +126,9 @@ model Redemption {
 model SitePublicConfig {
   id           String   @id @default("default")
   brandLine    String   @default("Сервис обратной связи с использованием QR-кодов")
-  emailInfo    String   @default("info@clientsay.ru")
-  phoneDisplay String   @default("89526230351")
-  phoneTel     String   @default("+79526230351")
-  schedule     String   @default("пн-пт 10:00-17:00 МСК")
+  emailInfo    String   @default("vadimka7753191@gmail.com")
+  phoneDisplay String   @default("")
+  phoneTel     String   @default("")
+  schedule     String   @default("Ответим на e-mail в рабочие дни (МСК)")
   updatedAt    DateTime @updatedAt
 }

@@ -1,10 +1,10 @@
 /** Контакты и материалы — подставьте свои реквизиты. */
 export const siteContact = {
-  phoneDisplay: "89526230351",
-  phoneTel: "+79526230351",
-  schedule: "пн–пт, 10:00–17:00 (МСК)",
-  emailInfo: "info@clientsay.ru",
-  emailPartners: "partner@clientsay.ru",
+  phoneDisplay: "",
+  phoneTel: "",
+  schedule: "Ответим на e-mail в рабочие дни (МСК)",
+  emailInfo: "vadimka7753191@gmail.com",
+  emailPartners: "vadimka7753191@gmail.com",
   /** E-mail для ВКонтакте / сообществ — заполните позже */
   emailVk: "" as string,
   brandLine: "Сервис обратной связи по QR с бонусами для гостя",

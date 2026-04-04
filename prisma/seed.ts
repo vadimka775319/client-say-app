@@ -75,16 +75,18 @@ async function main() {
   await prisma.sitePublicConfig.upsert({
     where: { id: "default" },
     update: {
-      phoneDisplay: "89526230351",
-      phoneTel: "+79526230351",
+      emailInfo: "vadimka7753191@gmail.com",
+      phoneDisplay: "",
+      phoneTel: "",
+      schedule: "Ответим на e-mail в рабочие дни (МСК)",
     },
     create: {
       id: "default",
       brandLine: "Сервис обратной связи с использованием QR-кодов",
-      emailInfo: "info@clientsay.ru",
-      phoneDisplay: "89526230351",
-      phoneTel: "+79526230351",
-      schedule: "пн-пт 10:00-17:00 МСК",
+      emailInfo: "vadimka7753191@gmail.com",
+      phoneDisplay: "",
+      phoneTel: "",
+      schedule: "Ответим на e-mail в рабочие дни (МСК)",
     },
   });
   console.log("Seeded site public config (footer / contacts)");
