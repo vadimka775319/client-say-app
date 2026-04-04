@@ -34,5 +34,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/partner/:path*", "/user/:path*"],
+  /** Явно включаем /user и /partner (без хвоста), иначе часть версий Next не защищает корень кабинета */
+  matcher: ["/admin/:path*", "/partner", "/partner/:path*", "/user", "/user/:path*"],
 };

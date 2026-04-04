@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   briefs,
   computeBriefPoints,
@@ -8,10 +8,7 @@ import {
   partners,
   Reward,
   rewardStatus,
-  users,
-  userFullName,
 } from "@/lib/mock-data";
-import { rewards as allRewards } from "@/lib/mock-data";
 import { incrementBriefResponseCount } from "@/lib/partner-brief-stats";
 import { readPartnerUploadedRewards, type PartnerUploadedReward } from "@/lib/partner-uploaded-rewards";
 import { ensureRedemptionPool, takePooledRedemptionCode } from "@/lib/redemption-code-pool";
@@ -23,59 +20,27 @@ function makeRedemptionCode(rewardId: string) {
   return `CS-${part}-${rnd}`;
 }
 
-function readStoredUserProfile(base: {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  points: number;
-}) {
-  if (typeof window === "undefined") return base;
-  try {
-    const raw = localStorage.getItem("clientsay_user_profile");
-    if (!raw) return base;
-    const p = JSON.parse(raw) as {
-      firstName?: string;
-      lastName?: string;
-      email?: string;
-      phone?: string;
-      points?: number;
-    };
-    return {
-      firstName: p.firstName ?? base.firstName,
-      lastName: p.lastName ?? base.lastName,
-      email: p.email ?? base.email,
-      phone: p.phone ?? base.phone,
-      points: typeof p.points === "number" ? p.points : base.points,
-    };
-  } catch {
-    return base;
-  }
+function isLocalOnlyReward(r: Reward) {
+  return r.id.startsWith("pr-cabinet-");
 }
 
 export function UserCabinet() {
-  const [user] = useState(users[0]);
-  const [initialProfile] = useState(() =>
-    readStoredUserProfile({
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      phone: user.phone,
-      points: user.points,
-    }),
-  );
-  const [firstName, setFirstName] = useState(initialProfile.firstName);
-  const [lastName, setLastName] = useState(initialProfile.lastName);
-  const [email, setEmail] = useState(initialProfile.email);
-  const [phone, setPhone] = useState(initialProfile.phone);
-  const [points, setPoints] = useState(initialProfile.points);
+  const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [points, setPoints] = useState(0);
   const [profileNotice, setProfileNotice] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
   const [redeemOpen, setRedeemOpen] = useState<Reward | null>(null);
   const [issuedCode, setIssuedCode] = useState<string | null>(null);
+  const [redeemBusy, setRedeemBusy] = useState(false);
   const [partnerRewardsTick, setPartnerRewardsTick] = useState(0);
   const [rewardsVersion, setRewardsVersion] = useState(0);
-  const skipPointsPersist = useRef(true);
+  const [dbRewards, setDbRewards] = useState<Reward[]>([]);
 
   useEffect(() => {
     const onPartnerRewards = () => setPartnerRewardsTick((t) => t + 1);
@@ -84,33 +49,83 @@ export function UserCabinet() {
   }, []);
 
   useEffect(() => {
-    if (skipPointsPersist.current) {
-      skipPointsPersist.current = false;
-      return;
-    }
-    localStorage.setItem(
-      "clientsay_user_profile",
-      JSON.stringify({ firstName, lastName, email, phone, points }),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- сохраняем полный профиль при смене баллов (демо), поля формы из текущего рендера
-  }, [points]);
+    let cancelled = false;
+    (async () => {
+      setLoadError(null);
+      const [meRes, rwRes] = await Promise.all([
+        fetch("/api/me", { cache: "no-store" }),
+        fetch("/api/user/rewards", { cache: "no-store" }),
+      ]);
+      if (cancelled) return;
+      if (!meRes.ok) {
+        setLoadError("Не удалось загрузить профиль. Обновите страницу или войдите снова.");
+        setReady(true);
+        return;
+      }
+      const me = (await meRes.json()) as {
+        user: { firstName: string; lastName: string; email: string | null; phone: string | null; points: number };
+      };
+      setFirstName(me.user.firstName ?? "");
+      setLastName(me.user.lastName ?? "");
+      setEmail(me.user.email ?? "");
+      setPhone(me.user.phone ?? "");
+      setPoints(me.user.points ?? 0);
+      if (rwRes.ok) {
+        const j = (await rwRes.json()) as { rewards?: Reward[] };
+        setDbRewards(Array.isArray(j.rewards) ? j.rewards : []);
+      } else {
+        setDbRewards([]);
+      }
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const sortedRewards = useMemo(() => {
     void partnerRewardsTick;
     void rewardsVersion;
     const extra = typeof window !== "undefined" ? readPartnerUploadedRewards() : [];
-    return [...allRewards, ...extra]
-      .map((r) => ({ ...r, stockLeft: getEffectiveStockLeft(r) }))
-      .sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime());
-  }, [partnerRewardsTick, rewardsVersion]);
+    const dbIds = new Set(dbRewards.map((r) => r.id));
+    const lsOnly = extra.filter((r) => !dbIds.has(r.id));
+    const merged: Reward[] = [
+      ...dbRewards,
+      ...lsOnly.map((r) => ({ ...r, stockLeft: getEffectiveStockLeft(r) })),
+    ];
+    return merged.sort((a, b) => new Date(a.endsAt).getTime() - new Date(b.endsAt).getTime());
+  }, [dbRewards, partnerRewardsTick, rewardsVersion]);
 
-  function saveProfile() {
-    localStorage.setItem(
-      "clientsay_user_profile",
-      JSON.stringify({ firstName, lastName, email, phone, points }),
-    );
-    setProfileNotice("Профиль и баллы сохранены в этом браузере.");
+  async function saveProfile() {
+    setProfileSaving(true);
+    setProfileNotice(null);
     setPasswordNotice(null);
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+        }),
+      });
+      const data = (await res.json()) as { error?: { message?: string }; user?: { email: string | null; phone: string | null } };
+      if (!res.ok) {
+        setProfileNotice(data?.error?.message ?? "Не удалось сохранить.");
+        return;
+      }
+      if (data.user) {
+        setEmail(data.user.email ?? "");
+        setPhone(data.user.phone ?? "");
+      }
+      setProfileNotice("Профиль сохранён в аккаунте.");
+    } catch {
+      setProfileNotice("Сеть недоступна. Попробуйте снова.");
+    } finally {
+      setProfileSaving(false);
+    }
   }
 
   function requestPasswordReset() {
@@ -124,22 +139,78 @@ export function UserCabinet() {
     setRedeemOpen(r);
   }
 
-  function confirmRedeem() {
+  async function confirmRedeem() {
     if (!redeemOpen) return;
     if (points < redeemOpen.pointsCost) return;
-    const stock = getEffectiveStockLeft(redeemOpen);
-    if (stock <= 0) return;
-    ensureRedemptionPool(redeemOpen.id, stock);
-    const code = takePooledRedemptionCode(redeemOpen.id) ?? makeRedemptionCode(redeemOpen.id);
-    setPoints((p) => p - redeemOpen.pointsCost);
-    decrementStockAfterRedeem(redeemOpen);
-    setIssuedCode(code);
-    setRewardsVersion((v) => v + 1);
+    setRedeemBusy(true);
+    try {
+      if (isLocalOnlyReward(redeemOpen)) {
+        const stock = getEffectiveStockLeft(redeemOpen);
+        if (stock <= 0) return;
+        ensureRedemptionPool(redeemOpen.id, stock);
+        const code = takePooledRedemptionCode(redeemOpen.id) ?? makeRedemptionCode(redeemOpen.id);
+        setPoints((p) => p - redeemOpen.pointsCost);
+        decrementStockAfterRedeem(redeemOpen);
+        setIssuedCode(code);
+        setRewardsVersion((v) => v + 1);
+        return;
+      }
+
+      const res = await fetch("/api/user/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rewardId: redeemOpen.id }),
+      });
+      const data = (await res.json()) as { code?: string; error?: { message?: string }; points?: number };
+      if (!res.ok) {
+        setProfileNotice(data?.error?.message ?? "Обмен не выполнен.");
+        return;
+      }
+      if (data.points != null) setPoints(data.points);
+      if (data.code) setIssuedCode(data.code);
+      setRewardsVersion((v) => v + 1);
+      const rw = await fetch("/api/user/rewards", { cache: "no-store" });
+      if (rw.ok) {
+        const j = (await rw.json()) as { rewards?: Reward[] };
+        setDbRewards(Array.isArray(j.rewards) ? j.rewards : []);
+      }
+    } catch {
+      setProfileNotice("Сеть недоступна при обмене.");
+    } finally {
+      setRedeemBusy(false);
+    }
   }
 
   function closeModal() {
     setRedeemOpen(null);
     setIssuedCode(null);
+  }
+
+  const awardDemoPoints = useCallback(async (delta: number) => {
+    const res = await fetch("/api/user/demo-points", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ delta }),
+    });
+    if (!res.ok) return;
+    const j = (await res.json()) as { points?: number };
+    if (typeof j.points === "number") setPoints(j.points);
+  }, []);
+
+  if (!ready) {
+    return (
+      <section className="card text-center text-sm text-slate-600">
+        Загрузка кабинета…
+      </section>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <section className="card border-rose-200 bg-rose-50 text-sm text-rose-900">
+        {loadError}
+      </section>
+    );
   }
 
   return (
@@ -148,18 +219,12 @@ export function UserCabinet() {
         <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">Ваш аккаунт</p>
         <h1 className="mt-2 text-2xl font-bold text-slate-900 md:text-3xl">Баллы, профиль и призы</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Заполните профиль, копите баллы за брифы и обменивайте на призы. Чтобы получить подарок в точке, покажите{" "}
-          <strong>код подтверждения</strong> сотруднику — одних баллов на экране недостаточно.
-        </p>
-        <p className="mt-3 rounded-lg bg-slate-100/80 p-3 text-xs text-slate-600">
-          Обычно гость просто сканирует QR камерой — открывается бриф. После ответов показываем начисление баллов и
-          предлагаем зарегистрироваться (имя, телефон или email, пароль). Если человек уже вошёл в аккаунт, баллы сразу
-          падают на его баланс. Отдельная кнопка «Сканировать QR» в кабинете не обязательна — это опционально для
-          повторных визитов.
+          Данные подтягиваются из вашего аккаунта после входа. «Сохранить профиль» записывает имя и контакты в базу.
+          Баллы и обмен призов тоже на сервере.
         </p>
       </section>
 
-      <QrFlowDemo points={points} setPoints={setPoints} />
+      <QrFlowDemo points={points} awardDemoPoints={awardDemoPoints} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="card lg:col-span-2">
@@ -200,18 +265,26 @@ export function UserCabinet() {
             </label>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            При регистрации эти поля сохраняются в аккаунте; смена email/телефона может потребовать подтверждения (в
-            продакшене).
+            Email и телефон должны быть уникальными в системе. Пустой email допустим, если входите по телефону.
           </p>
           <button
             type="button"
-            onClick={saveProfile}
-            className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            onClick={() => void saveProfile()}
+            disabled={profileSaving}
+            className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
-            Сохранить профиль
+            {profileSaving ? "Сохранение…" : "Сохранить профиль"}
           </button>
           {profileNotice && (
-            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{profileNotice}</p>
+            <p
+              className={`mt-3 rounded-lg p-3 text-sm ${
+                profileNotice.includes("Не удалось") || profileNotice.includes("Сеть")
+                  ? "border border-rose-200 bg-rose-50 text-rose-900"
+                  : "border border-emerald-200 bg-emerald-50 text-emerald-900"
+              }`}
+            >
+              {profileNotice}
+            </p>
           )}
 
           <div className="mt-6 border-t border-slate-100 pt-4">
@@ -230,14 +303,17 @@ export function UserCabinet() {
           </div>
         </section>
 
-        {/* Не используем класс .card: в globals он задаёт белый фон и перекрывает тёмную тему панели */}
         <section className="flex min-h-[280px] flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900 p-[1.1rem] text-white shadow-lg">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Данные в профиле</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Сводка аккаунта</p>
             <dl className="mt-4 space-y-3 text-sm">
               <div>
                 <dt className="text-xs text-slate-400">Имя</dt>
-                <dd className="mt-0.5 font-semibold text-white">{userFullName({ ...user, firstName, lastName, email, phone, points })}</dd>
+                <dd className="mt-0.5 font-semibold text-white">{firstName.trim() || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Фамилия</dt>
+                <dd className="mt-0.5 font-semibold text-white">{lastName.trim() || "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Email</dt>
@@ -252,11 +328,7 @@ export function UserCabinet() {
           <div className="mt-6 border-t border-slate-700 pt-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Активные баллы</p>
             <p className="mt-1 text-4xl font-extrabold tabular-nums text-white">{points}</p>
-            <p className="text-sm text-slate-300">баллов на счёте</p>
-            <p className="mt-3 text-xs text-slate-500">
-              Последний бриф:{" "}
-              {user.lastBriefAt ? new Date(user.lastBriefAt).toLocaleString("ru-RU") : "—"}
-            </p>
+            <p className="text-sm text-slate-300">баллов на счёте (из базы)</p>
           </div>
         </section>
       </div>
@@ -266,8 +338,7 @@ export function UserCabinet() {
       <section className="card">
         <h2 className="h2">Призы за баллы</h2>
         <p className="mb-4 text-sm text-slate-600">
-          Все акции из витрины: срок, остаток, стоимость. После обмена вы получите код — покажите его на кассе или
-          администратору.
+          Акции из базы и локальные призы партнёра (этот браузер). Обмен с серверными призами выдаёт уникальный код в базе.
         </p>
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {sortedRewards.map((reward) => {
@@ -352,8 +423,7 @@ export function UserCabinet() {
                 <h3 className="text-lg font-bold text-slate-900">Подтвердить обмен</h3>
                 <p className="mt-2 text-sm text-slate-600">
                   Списываем <strong>{redeemOpen.pointsCost}</strong> баллов за «{redeemOpen.title}». Вы получите{" "}
-                  <strong>одноразовый код выдачи</strong> из пула заведения (каждый обмен — новый код, как отдельная
-                  «строчка» в тираже).
+                  <strong>одноразовый код</strong> для показа в заведении.
                 </p>
                 <div className="mt-4 flex gap-2">
                   <button
@@ -365,26 +435,22 @@ export function UserCabinet() {
                   </button>
                   <button
                     type="button"
-                    onClick={confirmRedeem}
-                    className="flex-1 rounded-lg bg-violet-600 py-2 text-sm font-semibold text-white"
+                    disabled={redeemBusy}
+                    onClick={() => void confirmRedeem()}
+                    className="flex-1 rounded-lg bg-violet-600 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    Подтвердить
+                    {redeemBusy ? "…" : "Подтвердить"}
                   </button>
                 </div>
               </>
             ) : (
               <>
                 <h3 className="text-lg font-bold text-slate-900">Заберите приз</h3>
-                <p className="mt-2 text-sm text-slate-600">
-                  Покажите этот код сотруднику. Он сверит его в системе партнёра.
-                </p>
+                <p className="mt-2 text-sm text-slate-600">Покажите этот код сотруднику.</p>
                 <p className="mt-4 rounded-xl bg-slate-900 py-4 text-center font-mono text-2xl font-bold tracking-widest text-white">
                   {issuedCode}
                 </p>
-                <p className="mt-3 text-xs text-slate-500">
-                  Код уникален для этой выдачи — сотрудник списывает его один раз. Сохраните скриншот; в продакшене
-                  продублируем в email/SMS.
-                </p>
+                <p className="mt-3 text-xs text-slate-500">Сохраните скриншот. Код уникален для этой выдачи.</p>
                 <button
                   type="button"
                   onClick={closeModal}
@@ -401,51 +467,27 @@ export function UserCabinet() {
   );
 }
 
+type PublicPartnerRow = {
+  id: string;
+  companyName: string;
+  city: string;
+  addressLine: string;
+  locations: number;
+};
+
 function PartnerDirectoryForUser() {
-  const [cabinet, setCabinet] = useState<{
-    brandName: string;
-    companyCity?: string;
-    companyAddress?: string;
-    locations?: number;
-  } | null>(null);
+  const [dbList, setDbList] = useState<PublicPartnerRow[]>([]);
 
   useEffect(() => {
-    function load() {
-      if (typeof window === "undefined") return;
-      try {
-        const raw = localStorage.getItem("clientsay_partner_profile");
-        if (!raw) {
-          setCabinet(null);
-          return;
-        }
-        const p = JSON.parse(raw) as {
-          companyName?: string;
-          companyCity?: string;
-          companyAddress?: string;
-          locations?: number;
-        };
-        if (!p.companyName?.trim()) {
-          setCabinet(null);
-          return;
-        }
-        setCabinet({
-          brandName: p.companyName,
-          companyCity: p.companyCity,
-          companyAddress: p.companyAddress,
-          locations: p.locations,
-        });
-      } catch {
-        setCabinet(null);
-      }
-    }
-    load();
-    window.addEventListener("storage", load);
-    window.addEventListener("focus", load);
-    window.addEventListener("clientsay-partner-profile-changed", load);
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/partners/public", { cache: "no-store" });
+      if (!res.ok || cancelled) return;
+      const j = (await res.json()) as { partners?: PublicPartnerRow[] };
+      if (Array.isArray(j.partners)) setDbList(j.partners);
+    })();
     return () => {
-      window.removeEventListener("storage", load);
-      window.removeEventListener("focus", load);
-      window.removeEventListener("clientsay-partner-profile-changed", load);
+      cancelled = true;
     };
   }, []);
 
@@ -453,33 +495,30 @@ function PartnerDirectoryForUser() {
     <section className="card">
       <h2 className="h2">Где оставить бриф</h2>
       <p className="mb-4 text-sm text-slate-600">
-        Зарегистрированные партнёры. Пройти бриф и получить баллы можно <strong>в точке</strong> — там стоит QR. В личном
-        кабинете QR <strong>не открывается</strong>: так мы отделяем реальный визит от удалённого просмотра.
+        Партнёры из базы и демо-справочник. Пройти бриф можно <strong>в точке</strong> — там QR. В кабинете QR{" "}
+        <strong>не открывается</strong>.
       </p>
       <ul className="space-y-4">
+        {dbList.map((p) => (
+          <li key={p.id} className="rounded-xl border border-violet-200 bg-violet-50/30 p-4 text-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <strong className="text-slate-900">{p.companyName}</strong>
+              {p.city ? <span className="text-xs font-medium text-violet-800">{p.city}</span> : null}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{p.locations} точек</p>
+            {p.addressLine ? <p className="mt-2 text-slate-700">{p.addressLine}</p> : null}
+          </li>
+        ))}
         {partners.map((p) => (
-          <li key={p.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm">
+          <li key={`mock-${p.id}`} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <strong className="text-slate-900">{p.brandName}</strong>
               {p.city ? <span className="text-xs font-medium text-violet-800">{p.city}</span> : null}
             </div>
-            <p className="mt-1 text-xs text-slate-500">{p.locations} точек</p>
+            <p className="mt-1 text-xs text-slate-500">{p.locations} точек (демо)</p>
             {p.addressHint ? <p className="mt-2 text-slate-700">{p.addressHint}</p> : null}
           </li>
         ))}
-        {cabinet ? (
-          <li className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 text-sm">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <strong className="text-slate-900">{cabinet.brandName}</strong>
-              {cabinet.companyCity?.trim() ? (
-                <span className="text-xs font-medium text-violet-800">{cabinet.companyCity}</span>
-              ) : null}
-            </div>
-            {cabinet.locations != null ? <p className="mt-1 text-xs text-slate-500">Точек: {cabinet.locations}</p> : null}
-            {cabinet.companyAddress?.trim() ? <p className="mt-2 text-slate-700">{cabinet.companyAddress}</p> : null}
-            <p className="mt-2 text-xs text-slate-500">Карточка из кабинета партнёра (этот браузер).</p>
-          </li>
-        ) : null}
       </ul>
     </section>
   );
@@ -487,10 +526,10 @@ function PartnerDirectoryForUser() {
 
 function QrFlowDemo({
   points,
-  setPoints,
+  awardDemoPoints,
 }: {
   points: number;
-  setPoints: Dispatch<SetStateAction<number>>;
+  awardDemoPoints: (delta: number) => Promise<void>;
 }) {
   const [partnerId, setPartnerId] = useState(partners[0].id);
   const [stage, setStage] = useState<"pick" | "brief" | "done">("pick");
@@ -499,15 +538,15 @@ function QrFlowDemo({
   const brief = briefs.find((b) => b.partnerId === partnerId);
   const pts = brief ? computeBriefPoints(brief.questions.length) : 0;
 
-  function finishBrief() {
+  async function finishBrief() {
     if (brief) incrementBriefResponseCount(brief.id);
-    setPoints((p) => p + pts);
+    await awardDemoPoints(pts);
     setLastAward(pts);
     setStage("done");
   }
 
-  function resetFlow() {
-    if (lastAward > 0) setPoints((p) => p - lastAward);
+  async function resetFlow() {
+    if (lastAward > 0) await awardDemoPoints(-lastAward);
     setLastAward(0);
     setStage("pick");
   }
@@ -519,8 +558,7 @@ function QrFlowDemo({
       </summary>
       <div className="mt-4 space-y-4 text-sm text-slate-700">
         <p className="text-xs text-slate-600">
-          Выберите заведение, «пройдите» бриф — баллы добавятся к балансу выше. Блок имитирует экран после QR для уже
-          вошедшего пользователя; для гостя ниже — форма регистрации после начисления.
+          Баллы начисляются на ваш аккаунт в базе (запрос к серверу). Сброс сценария откатывает последнее демо-начисление.
         </p>
         <label className="block text-xs font-medium">
           Заведение
@@ -570,7 +608,7 @@ function QrFlowDemo({
             <button
               type="button"
               className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              onClick={finishBrief}
+              onClick={() => void finishBrief()}
             >
               Отправить ответы (демо)
             </button>
@@ -580,10 +618,10 @@ function QrFlowDemo({
         {stage === "done" && (
           <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
             <p className="font-semibold text-emerald-900">
-              +{lastAward} баллов начислено. Актуальный баланс — в карточке «Баланс» выше ({points} б.).
+              +{lastAward} баллов начислено. Баланс в карточке справа и в базе: <strong>{points}</strong> б.
             </p>
             <p className="text-xs text-slate-600">
-              Для нового гостя здесь же: «Зарегистрируйтесь, чтобы сохранить баллы». После регистрации они уже на аккаунте.
+              Для нового гостя: регистрация на главной /sign-in?role=USER.
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               <input
@@ -609,12 +647,12 @@ function QrFlowDemo({
             <button
               type="button"
               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold"
-              onClick={() => alert("В продакшене — создание аккаунта и привязка начисления (демо).")}
+              onClick={() => alert("Регистрация — через форму на странице входа (роль «пользователь»).")}
             >
               Зарегистрироваться и сохранить баллы (демо)
             </button>
-            <button type="button" className="ml-2 text-xs font-semibold text-violet-700" onClick={resetFlow}>
-              Сбросить сценарий (откатит демо-баллы)
+            <button type="button" className="ml-2 text-xs font-semibold text-violet-700" onClick={() => void resetFlow()}>
+              Сбросить сценарий (откат демо-баллов на сервере)
             </button>
           </div>
         )}

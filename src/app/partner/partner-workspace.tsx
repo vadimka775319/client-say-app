@@ -124,6 +124,9 @@ export function PartnerWorkspace() {
   const [editingPrizeId, setEditingPrizeId] = useState<string | null>(null);
   const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null);
 
+  const [companySaving, setCompanySaving] = useState(false);
+  const [companyNotice, setCompanyNotice] = useState<string | null>(null);
+
   const [prizeForm, setPrizeForm] = useState({
     title: "",
     description: "",
@@ -146,6 +149,28 @@ export function PartnerWorkspace() {
     const onStats = () => setStatsTick((t) => t + 1);
     window.addEventListener("clientsay-brief-stats-changed", onStats);
     return () => window.removeEventListener("clientsay-brief-stats-changed", onStats);
+  }, []);
+
+  const companyHydratedFromApi = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const r = await fetch("/api/me", { cache: "no-store" });
+      if (!r.ok || cancelled || companyHydratedFromApi.current) return;
+      const d = (await r.json()) as {
+        partner?: { companyName: string; city: string; addressLine: string; locations: number } | null;
+      };
+      if (d.partner) {
+        companyHydratedFromApi.current = true;
+        setCompanyName(d.partner.companyName);
+        setCompanyCity(d.partner.city ?? "");
+        setCompanyAddress(d.partner.addressLine ?? "");
+        setLocations(d.partner.locations ?? 0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -349,6 +374,33 @@ export function PartnerWorkspace() {
 
   const maxResponses = Math.max(1, ...briefs.map((b) => responseCounts[b.id] ?? 0));
 
+  async function saveCompanyProfileToServer() {
+    setCompanySaving(true);
+    setCompanyNotice(null);
+    try {
+      const r = await fetch("/api/partner/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: companyName.trim(),
+          city: companyCity.trim(),
+          addressLine: companyAddress.trim(),
+          locations,
+        }),
+      });
+      const j = (await r.json()) as { error?: { message?: string } };
+      if (!r.ok) {
+        setCompanyNotice(j?.error?.message ?? "Не удалось сохранить компанию.");
+        return;
+      }
+      setCompanyNotice("Профиль компании сохранён в базе — пользователи увидят его в разделе «Где оставить бриф».");
+    } catch {
+      setCompanyNotice("Сеть недоступна.");
+    } finally {
+      setCompanySaving(false);
+    }
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-8 md:px-8">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -407,6 +459,29 @@ export function PartnerWorkspace() {
             onChange={(e) => setCompanyAddress(e.target.value)}
           />
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Данные подгружаются из аккаунта после входа. Нажмите «Сохранить в базу», чтобы они отображались у пользователей
+          на сайте.
+        </p>
+        <button
+          type="button"
+          disabled={companySaving || !companyName.trim()}
+          onClick={() => void saveCompanyProfileToServer()}
+          className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {companySaving ? "Сохранение…" : "Сохранить компанию в базу"}
+        </button>
+        {companyNotice ? (
+          <p
+            className={`mt-2 rounded-lg p-2 text-xs ${
+              companyNotice.includes("Не удалось") || companyNotice.includes("Сеть")
+                ? "bg-rose-50 text-rose-900"
+                : "bg-emerald-50 text-emerald-900"
+            }`}
+          >
+            {companyNotice}
+          </p>
+        ) : null}
       </section>
 
       <section className="card">

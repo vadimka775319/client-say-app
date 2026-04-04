@@ -48,6 +48,7 @@ model Partner {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName String
   city        String   @default("")
+  addressLine String   @default("")
   locations   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

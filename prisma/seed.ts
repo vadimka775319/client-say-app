@@ -50,17 +50,47 @@ async function main() {
     lastName: "Партнёр",
   });
 
-  await prisma.partner.upsert({
+  const demoPartner = await prisma.partner.upsert({
     where: { userId: partnerUser.id },
-    update: { companyName: "Демо-компания", city: "Москва", locations: 0 },
+    update: {
+      companyName: "Демо-компания",
+      city: "Москва",
+      locations: 3,
+      addressLine: "ТЦ «Пульс», демо-точка — QR для брифа на стойке.",
+    },
     create: {
       userId: partnerUser.id,
       companyName: "Демо-компания",
       city: "Москва",
-      locations: 0,
+      locations: 3,
+      addressLine: "ТЦ «Пульс», демо-точка — QR для брифа на стойке.",
     },
   });
   console.log("Seeded partner: partner@clientsay.ru");
+
+  await prisma.reward.upsert({
+    where: { id: "seed_reward_demo_coffee" },
+    update: {
+      stockLeft: 42,
+      totalStock: 100,
+      pointsCost: 300,
+      endsAt: new Date("2026-12-31T23:59:59.000Z"),
+    },
+    create: {
+      id: "seed_reward_demo_coffee",
+      partnerId: demoPartner.id,
+      fundedByPlatform: false,
+      title: "Капучино в подарок",
+      description: "Классический капучино 300 мл. Покажите код сотруднику.",
+      imageUrl: "https://picsum.photos/seed/pulse-r1/800/440",
+      pointsCost: 300,
+      totalStock: 100,
+      stockLeft: 42,
+      startsAt: new Date("2026-03-01T00:00:00.000Z"),
+      endsAt: new Date("2026-12-31T23:59:59.000Z"),
+    },
+  });
+  console.log("Seeded demo reward for partner cabinet");
 
   await upsertUser({
     email: "user@clientsay.ru",
