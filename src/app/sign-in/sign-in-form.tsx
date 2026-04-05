@@ -40,11 +40,20 @@ function hintForRole(role: SessionRole | null) {
   return null;
 }
 
-export default function SignInForm() {
+export type SignInFormProps = {
+  /** В модалке на главной: зафиксировать роль. Если не задано — из URL ?role= */
+  embeddedRole?: SessionRole | null;
+  hideChrome?: boolean;
+  onRequestClose?: () => void;
+};
+
+export default function SignInForm(props: SignInFormProps = {}) {
+  const { embeddedRole: embeddedRoleProp, hideChrome = false, onRequestClose } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
-  const roleParam = parseSessionRole(searchParams.get("role"));
+  const roleParam =
+    embeddedRoleProp !== undefined ? embeddedRoleProp : parseSessionRole(searchParams.get("role"));
   const reason = searchParams.get("reason");
 
   const isSuperCabinet = roleParam === "SUPER_ADMIN";
@@ -241,30 +250,16 @@ export default function SignInForm() {
     else void onLogin();
   }
 
-  return (
-    <>
-      <header className="border-b border-white/40 bg-white/60 px-5 py-3 backdrop-blur-md md:px-8">
-        <div className="mx-auto flex max-w-lg items-center justify-between">
-          <Link
-            href="/"
-            className="font-brand-logo text-lg tracking-tight text-transparent bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text"
-          >
-            {BRAND_NAME}
-          </Link>
-          <Link href="/" className="text-xs font-semibold text-slate-600 hover:text-violet-700">
-            ← На главную
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-6 px-5 py-10 md:py-14">
+  const inner = (
         <section className="rounded-3xl border border-white/80 bg-white/90 p-6 shadow-xl shadow-violet-900/5 backdrop-blur-md md:p-8">
           <p className="text-xs font-bold uppercase tracking-widest text-violet-600">Безопасный вход</p>
           <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900 md:text-3xl">{title}</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            {roleParam == null
-              ? "Войдите учётной записью из базы (после db:seed) или откройте нужный кабинет с главной — откроется вход с проверкой роли."
-              : "Сессия в защищённой cookie. После входа вы вернётесь в запрошенный раздел."}
+            {hideChrome
+              ? "Войдите или зарегистрируйтесь. После входа вы попадёте в нужный кабинет (партнёр или пользователь)."
+              : roleParam == null
+                ? "Войдите учётной записью из базы (после db:seed) или откройте нужный кабинет с главной — откроется вход с проверкой роли."
+                : "Сессия в защищённой cookie. После входа вы вернётесь в запрошенный раздел."}
           </p>
 
           {reason === "wrong_role" && (
@@ -420,6 +415,41 @@ export default function SignInForm() {
             </p>
           )}
         </section>
+  );
+
+  if (hideChrome) {
+    return (
+      <div className="w-full">
+        {inner}
+        {onRequestClose ? (
+          <p className="mt-3 text-center text-xs text-slate-500">
+            <button type="button" onClick={onRequestClose} className="font-semibold text-violet-700 hover:underline">
+              Закрыть окно
+            </button>
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <header className="border-b border-white/40 bg-white/60 px-5 py-3 backdrop-blur-md md:px-8">
+        <div className="mx-auto flex max-w-lg items-center justify-between">
+          <Link
+            href="/"
+            className="font-brand-logo bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-lg tracking-tight text-transparent"
+          >
+            {BRAND_NAME}
+          </Link>
+          <Link href="/" className="text-xs font-semibold text-slate-600 hover:text-violet-700">
+            ← На главную
+          </Link>
+        </div>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-6 px-5 py-10 md:py-14">
+        {inner}
 
         <p className="text-center text-xs text-slate-600">
           <Link href="/" className="font-semibold text-violet-700 hover:underline">

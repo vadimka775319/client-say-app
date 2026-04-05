@@ -76,6 +76,18 @@ function downloadDataUrl(dataUrl: string, filename: string) {
   a.remove();
 }
 
+function speakUrlAloud(url: string, onUnsupported: () => void) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    onUnsupported();
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(url);
+  u.lang = "ru-RU";
+  u.rate = 0.92;
+  window.speechSynthesis.speak(u);
+}
+
 export function PartnerWorkspace() {
   const [companyName, setCompanyName] = useState("");
   const [companyCity, setCompanyCity] = useState("");
@@ -867,6 +879,17 @@ export function PartnerWorkspace() {
                             onClick={() => window.open(b.qrCode, "_blank", "noopener,noreferrer")}
                           >
                             Открыть страницу брифа
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900"
+                            onClick={() =>
+                              speakUrlAloud(b.qrCode, () =>
+                                setMessage("Озвучивание ссылки недоступно в этом браузере."),
+                              )
+                            }
+                          >
+                            Произнести ссылку вслух
                           </button>
                           <button
                             type="button"

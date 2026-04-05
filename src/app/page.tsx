@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AuthModal, type HomeAuthRole } from "@/app/components/auth-modal";
 import { DeployBadge } from "@/app/components/deploy-badge";
 import { DemoQrCard } from "@/app/components/demo-qr-card";
 import { partnerPlans, partners, rewards, users } from "@/lib/mock-data";
@@ -104,6 +105,14 @@ export default function Home() {
   const monthlyPlan = partnerPlans.find((p) => p.id === "monthly");
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<HomeAuthRole>("GENERAL");
+
+  const openAuth = (mode: HomeAuthRole) => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+    setMobileMenuOpen(false);
+  };
   const pricingRef = useRef<HTMLElement | null>(null);
   const pricingViewSent = useRef(false);
 
@@ -224,24 +233,27 @@ export default function Home() {
               </a>
             </nav>
             <div className="flex shrink-0 flex-nowrap items-center gap-2 border-l border-slate-100 pl-2 lg:pl-3">
-              <Link
-                href="/partner"
+              <button
+                type="button"
+                onClick={() => openAuth("PARTNER")}
                 className="whitespace-nowrap rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition-all hover:border-violet-200 hover:shadow-md"
               >
-                Кабинет партнёра
-              </Link>
-              <Link
-                href="/user"
+                Войти как партнёр
+              </button>
+              <button
+                type="button"
+                onClick={() => openAuth("USER")}
                 className="whitespace-nowrap rounded-full border border-transparent px-4 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
               >
-                Личный кабинет
-              </Link>
-              <Link
-                href="/sign-in"
+                Войти как пользователь
+              </button>
+              <button
+                type="button"
+                onClick={() => openAuth("GENERAL")}
                 className="whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-slate-800"
               >
                 Вход
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -284,27 +296,27 @@ export default function Home() {
                 Материалы
               </a>
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Link
-                  href="/partner"
+                <button
+                  type="button"
                   className="rounded-full border border-sky-200 bg-white px-4 py-2 text-center font-semibold text-slate-800 shadow-sm"
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={() => openAuth("PARTNER")}
                 >
-                  Кабинет партнёра
-                </Link>
-                <Link
-                  href="/user"
+                  Войти как партнёр
+                </button>
+                <button
+                  type="button"
                   className="rounded-full border border-transparent px-4 py-2 text-center font-semibold text-violet-700 hover:bg-violet-50"
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={() => openAuth("USER")}
                 >
-                  Личный кабинет
-                </Link>
-                <Link
-                  href="/sign-in"
+                  Войти как пользователь
+                </button>
+                <button
+                  type="button"
                   className="rounded-full bg-slate-900 px-4 py-2 text-center font-semibold text-white shadow-md"
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={() => openAuth("GENERAL")}
                 >
                   Вход
-                </Link>
+                </button>
               </div>
             </nav>
           </div>
@@ -458,18 +470,20 @@ export default function Home() {
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-3">
-                <Link
-                  href="/partner"
+                <button
+                  type="button"
+                  onClick={() => openAuth("PARTNER")}
                   className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5"
                 >
-                  Кабинет партнёра
-                </Link>
-                <Link
-                  href="/user"
+                  Войти как партнёр
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuth("USER")}
                   className="rounded-full border-2 border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-800 transition-all hover:border-violet-200"
                 >
-                  Личный кабинет
-                </Link>
+                  Войти как пользователь
+                </button>
               </div>
             </div>
           </div>
@@ -876,6 +890,8 @@ export default function Home() {
           </div>
         </footer>
       </main>
+
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
     </div>
   );
 }

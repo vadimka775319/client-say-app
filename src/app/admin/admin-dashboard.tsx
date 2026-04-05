@@ -109,6 +109,17 @@ export function AdminDashboard() {
 
   return (
     <>
+      <section className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm">
+        <p className="font-semibold text-amber-900">Как устроен супер-админ в коде</p>
+        <p className="mt-2 leading-relaxed">
+          Роль <strong>SUPER_ADMIN</strong> создаётся только через <code className="rounded bg-white/80 px-1">db:seed</code>{" "}
+          (публичной регистрации нет). Ниже — демо-таблицы в браузере (mock + localStorage), они{" "}
+          <strong>не заменяют</strong> реальных партнёров и пользователей в PostgreSQL. Контакты и тексты в футере главной,
+          которые сохраняются в базе, правятся через блок настроек сайта (запросы к{" "}
+          <code className="rounded bg-white/80 px-1">/api/site/public</code>).
+        </p>
+      </section>
+
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold text-slate-900">Возможности супер-администратора</h2>
         <ul className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">

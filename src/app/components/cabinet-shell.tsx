@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { useCabinetIdleLogout } from "@/app/components/use-cabinet-idle-logout";
 import { BRAND_NAME } from "@/lib/brand";
 
 type CabinetShellProps = {
@@ -13,16 +14,17 @@ type CabinetShellProps = {
 };
 
 /**
- * Общая шапка кабинетов: бренд, контекст, выход. Доступ к маршруту проверяется в `src/proxy.ts`.
+ * Общая шапка кабинетов: бренд, контекст, выход. Доступ к маршруту проверяется в `src/middleware.ts` (через `proxy.ts`).
  */
 export function CabinetShell({ title, subtitle, children }: CabinetShellProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  useCabinetIdleLogout();
 
   async function logout() {
     setBusy(true);
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include", cache: "no-store" });
       router.push("/");
       router.refresh();
     } finally {
