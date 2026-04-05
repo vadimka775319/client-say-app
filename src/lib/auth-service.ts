@@ -123,6 +123,11 @@ function duplicateMessage(e: unknown): string {
   return "Такой email или телефон уже зарегистрирован.";
 }
 
+/** Внешние route handlers: любой необработанный выброс (например findUserByLogin при падении БД). */
+export function authFailureFromUnknown(e: unknown, context: "register" | "login"): AuthFailure {
+  return mapDbError(e, context);
+}
+
 function mapDbError(e: unknown, context: "register" | "login"): AuthFailure {
   console.error(`[auth-service] ${context}`, e);
   const msg = e instanceof Error ? e.message : String(e);

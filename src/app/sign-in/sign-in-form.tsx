@@ -83,7 +83,7 @@ async function readResponseJson(res: Response): Promise<{ json: unknown | null; 
   }
 }
 
-function extractApiErrorMessage(json: unknown | null, res: Response): string {
+function extractApiErrorMessage(json: unknown | null, res: Response, raw: string): string {
   if (json && typeof json === "object") {
     const o = json as Record<string, unknown>;
     const er = o.error;
@@ -94,16 +94,29 @@ function extractApiErrorMessage(json: unknown | null, res: Response): string {
     const top = o.message;
     if (typeof top === "string" && top.trim()) return top.trim();
   }
-  if (res.status === 503) {
+
+  const st = res.status;
+  const head = raw.slice(0, 600).toLowerCase();
+  if (head.includes("<!doctype") || head.includes("<html")) {
+    return `Сервер вернул HTML вместо JSON (код ${st}). Часто это падение API или неверный nginx. Откройте /api/health — должно быть JSON с «db».`;
+  }
+
+  if (st === 502 || st === 504) {
+    return `Нет ответа от приложения (${st}). Проверьте PM2 и совпадение порта с nginx.`;
+  }
+  if (st === 403) {
+    return "Доступ к API запрещён (403). Проверьте nginx для POST /api/auth/register.";
+  }
+  if (st === 503) {
     return "Сервис временно недоступен. Откройте /api/health — поле db должно быть up; проверьте AUTH_SECRET и DATABASE_URL на сервере.";
   }
-  if (res.status >= 500) {
+  if (st >= 500) {
     return "Ошибка сервера. Проверьте /api/health, DATABASE_URL и AUTH_SECRET (не короче 32 символов).";
   }
-  if (res.status === 409) {
+  if (st === 409) {
     return "Этот email или телефон уже зарегистрирован. Войдите или укажите другой логин.";
   }
-  return "Запрос не выполнен. Проверьте интернет и попробуйте снова.";
+  return `Запрос не выполнен (код ${st}). Проверьте сеть; если повторяется — откройте /api/health.`;
 }
 
 export type SignInFormProps = {
@@ -158,8 +171,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
 
   const title = useMemo(() => {
     if (!roleParam) return `Вход в ${BRAND_NAME}`;
+    if (mode === "register" && canRegister) {
+      return `Регистрация — ${ROLE_LABEL[roleParam]}`;
+    }
     return `Вход для ${ROLE_LABEL[roleParam]}`;
-  }, [roleParam]);
+  }, [roleParam, mode, canRegister]);
 
   const registerLoginPreview = useMemo(() => {
     if (mode !== "register" || !canRegister) return null;
@@ -209,6 +225,10 @@ export default function SignInForm(props: SignInFormProps = {}) {
     }
     if (m.includes("имя")) {
       patchRegFieldErr("name", msg);
+      return true;
+    }
+    if (m.includes("html") || m.includes("nginx") || m.includes("pm2") || m.includes("/api/health")) {
+      patchRegFieldErr("login", msg);
       return true;
     }
     return false;
@@ -337,10 +357,10 @@ export default function SignInForm(props: SignInFormProps = {}) {
             firstName: name.trim(),
           }),
         });
-        const { json } = await readResponseJson(res);
+        const { json, raw } = await readResponseJson(res);
         const typed = json as { ok?: boolean; role?: SessionRole } | null;
         if (!res.ok) {
-          const msg = extractApiErrorMessage(json, res);
+          const msg = extractApiErrorMessage(json, res, raw);
           const mapped = mapRegisterApiErrorToFields(msg);
           setError(mapped ? "" : msg);
           return;
@@ -370,10 +390,10 @@ export default function SignInForm(props: SignInFormProps = {}) {
           firstName: name.trim() || "Партнёр",
         }),
       });
-      const { json } = await readResponseJson(res);
+      const { json, raw } = await readResponseJson(res);
       const typed = json as { ok?: boolean; role?: SessionRole } | null;
       if (!res.ok) {
-        const msg = extractApiErrorMessage(json, res);
+        const msg = extractApiErrorMessage(json, res, raw);
         const mapped = mapRegisterApiErrorToFields(msg);
         setError(mapped ? "" : msg);
         return;

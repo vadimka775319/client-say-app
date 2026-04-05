@@ -1,5 +1,6 @@
 import { authJsonError, authJsonSuccessWithCookie } from "@/lib/auth-route-helpers";
 import {
+  authFailureFromUnknown,
   hashPasswordForRegister,
   parseRegisterRequest,
   persistRegisteredUser,
@@ -27,24 +28,29 @@ export async function POST(req: Request) {
     return authJsonError(creds.status, creds.code, creds.message);
   }
 
-  const existing = await findUserByLogin(parsed.data.login);
-  if (existing) {
-    return authJsonError(
-      409,
-      "duplicate",
-      "Этот email или телефон уже зарегистрирован. Войдите с тем же паролем.",
-    );
-  }
+  try {
+    const existing = await findUserByLogin(parsed.data.login);
+    if (existing) {
+      return authJsonError(
+        409,
+        "duplicate",
+        "Этот email или телефон уже зарегистрирован. Войдите с тем же паролем.",
+      );
+    }
 
-  const hashed = hashPasswordForRegister(parsed.data.password);
-  if (!hashed.ok) {
-    return authJsonError(hashed.status, hashed.code, hashed.message);
-  }
+    const hashed = hashPasswordForRegister(parsed.data.password);
+    if (!hashed.ok) {
+      return authJsonError(hashed.status, hashed.code, hashed.message);
+    }
 
-  const created = await persistRegisteredUser(parsed.data, creds.email, creds.phone, hashed.hash);
-  if (!created.ok) {
-    return authJsonError(created.status, created.code, created.message);
-  }
+    const created = await persistRegisteredUser(parsed.data, creds.email, creds.phone, hashed.hash);
+    if (!created.ok) {
+      return authJsonError(created.status, created.code, created.message);
+    }
 
-  return authJsonSuccessWithCookie(req, created.userId, created.role, { ok: true, role: created.role });
+    return await authJsonSuccessWithCookie(req, created.userId, created.role, { ok: true, role: created.role });
+  } catch (e: unknown) {
+    const f = authFailureFromUnknown(e, "register");
+    return authJsonError(f.status, f.code, f.message);
+  }
 }
