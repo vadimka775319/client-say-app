@@ -3,8 +3,26 @@ import type { NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME, verifySession } from "@/lib/auth-session";
 import { requiredRoleForPath } from "@/lib/auth-routes";
 
+/** Next.js 16: нельзя держать middleware.ts рядом с proxy.ts — заголовки против кэша HTML здесь. */
+const SIGN_IN_NO_STORE =
+  "private, no-store, no-cache, must-revalidate, max-age=0";
+
+function nextWithSignInCacheHeaders() {
+  const res = NextResponse.next();
+  res.headers.set("Cache-Control", SIGN_IN_NO_STORE);
+  res.headers.set("Pragma", "no-cache");
+  res.headers.set("CDN-Cache-Control", "no-store");
+  res.headers.set("Vary", "Cookie, Accept-Encoding");
+  return res;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (pathname === "/sign-in" || pathname.startsWith("/sign-in/")) {
+    return nextWithSignInCacheHeaders();
+  }
+
   const required = requiredRoleForPath(pathname);
   if (!required) return NextResponse.next();
 
@@ -36,5 +54,13 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   /** Явно включаем /user и /partner (без хвоста), иначе часть версий Next не защищает корень кабинета */
-  matcher: ["/admin/:path*", "/partner", "/partner/:path*", "/user", "/user/:path*"],
+  matcher: [
+    "/sign-in",
+    "/sign-in/:path*",
+    "/admin/:path*",
+    "/partner",
+    "/partner/:path*",
+    "/user",
+    "/user/:path*",
+  ],
 };
