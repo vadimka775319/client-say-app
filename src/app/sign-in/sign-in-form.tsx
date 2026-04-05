@@ -135,10 +135,12 @@ export type SignInFormProps = {
   embeddedRole?: SessionRole | null;
   hideChrome?: boolean;
   onRequestClose?: () => void;
+  /** С сервера (RSC): если на экране нет этой строки или она не совпадает с GitHub — это кэш или другой домен. */
+  serverBuildLabel?: string | null;
 };
 
 export default function SignInForm(props: SignInFormProps = {}) {
-  const { embeddedRole: embeddedRoleProp, hideChrome = false, onRequestClose } = props;
+  const { embeddedRole: embeddedRoleProp, hideChrome = false, onRequestClose, serverBuildLabel = null } = props;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -198,6 +200,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
   const [lastDiag, setLastDiag] = useState<string | null>(null);
   const [regFieldErr, setRegFieldErr] = useState<Partial<Record<RegFieldKey, string>>>({});
   const [origin, setOrigin] = useState("");
+  const [apiBuildLabel, setApiBuildLabel] = useState<string | null>(null);
 
   function setRoleOnUrl(nextRole: "USER" | "PARTNER") {
     const p = new URLSearchParams(searchParams.toString());
@@ -215,6 +218,20 @@ export default function SignInForm(props: SignInFormProps = {}) {
   }
 
   useEffect(() => setOrigin(window.location.origin), []);
+
+  useEffect(() => {
+    void fetch(`/api/deploy-meta?bust=${Date.now()}`, { cache: "no-store", credentials: "same-origin" })
+      .then((r) => r.json() as Promise<{ gitShort?: string; buildEpoch?: number }>)
+      .then((j) => {
+        const g = j.gitShort?.trim();
+        if (!g) {
+          setApiBuildLabel(null);
+          return;
+        }
+        setApiBuildLabel(typeof j.buildEpoch === "number" ? `${g} · ${j.buildEpoch}` : g);
+      })
+      .catch(() => setApiBuildLabel(null));
+  }, []);
 
   const title = useMemo(() => {
     if (isSuperCabinet) return "Кабинет супер-админа";
@@ -758,6 +775,23 @@ export default function SignInForm(props: SignInFormProps = {}) {
                   : "Войти"}
             </button>
           </form>
+
+          <div className="mt-4 rounded-xl border border-dashed border-slate-300/90 bg-slate-50/90 px-3 py-2 text-center">
+            <p className="font-mono text-[10px] leading-relaxed text-slate-600">
+              <span className="font-semibold text-slate-700">Сборка (сервер HTML):</span> {serverBuildLabel ?? "—"}
+              <br />
+              <span className="font-semibold text-slate-700">Сборка (GET /api/deploy-meta):</span> {apiBuildLabel ?? "…"}
+            </p>
+            {serverBuildLabel && apiBuildLabel && serverBuildLabel !== apiBuildLabel ? (
+              <p className="mt-1 text-[10px] font-medium text-amber-900">
+                Версии разошлись — сделайте жёсткое обновление (Ctrl+Shift+R). Если не поможет, на CDN/nginx отключите кэш для
+                HTML и пути /sign-in.
+              </p>
+            ) : null}
+            {!serverBuildLabel && apiBuildLabel ? (
+              <p className="mt-1 text-[10px] text-slate-500">Модальное окно: ориентируйтесь на строку с API.</p>
+            ) : null}
+          </div>
 
           {demoHint && process.env.NODE_ENV === "development" && (
             <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-600">
