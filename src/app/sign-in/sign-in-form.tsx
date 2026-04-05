@@ -132,8 +132,29 @@ export default function SignInForm(props: SignInFormProps = {}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
-  const roleParam =
+  /** Роль из URL или из модалки главной; `null` — на странице /sign-in без ?role= (нужен выбор кабинета). */
+  const roleFromUrlOrEmbed =
     embeddedRoleProp !== undefined ? embeddedRoleProp : parseSessionRole(searchParams.get("role"));
+
+  const [cabinetPick, setCabinetPick] = useState<"USER" | "PARTNER" | null>(null);
+
+  useEffect(() => {
+    if (
+      roleFromUrlOrEmbed === "USER" ||
+      roleFromUrlOrEmbed === "PARTNER" ||
+      roleFromUrlOrEmbed === "SUPER_ADMIN"
+    ) {
+      setCabinetPick(null);
+    }
+  }, [roleFromUrlOrEmbed]);
+
+  const roleParam = useMemo((): SessionRole | null => {
+    if (roleFromUrlOrEmbed === "SUPER_ADMIN") return "SUPER_ADMIN";
+    if (roleFromUrlOrEmbed === "USER" || roleFromUrlOrEmbed === "PARTNER") return roleFromUrlOrEmbed;
+    return cabinetPick;
+  }, [roleFromUrlOrEmbed, cabinetPick]);
+
+  const needsCabinetChoice = roleFromUrlOrEmbed === null;
 
   /** Старые ссылки с ?reason=wrong_role: сброс сессии и чистый URL без жёлтого баннера. */
   useEffect(() => {
@@ -154,6 +175,8 @@ export default function SignInForm(props: SignInFormProps = {}) {
 
   const isSuperCabinet = roleParam === "SUPER_ADMIN";
   const canRegister = roleParam === "PARTNER" || roleParam === "USER";
+  /** У админа только вход; у остальных — переключатель вход/регистрация. */
+  const showAuthModeToggle = !isSuperCabinet;
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [identifier, setIdentifier] = useState("");
@@ -303,6 +326,10 @@ export default function SignInForm(props: SignInFormProps = {}) {
   async function onRegister() {
     setError("");
     setRegFieldErr({});
+    if (needsCabinetChoice && !cabinetPick) {
+      setError("Выберите кабинет: пользователь или партнёр.");
+      return;
+    }
     if (!canRegister || !roleParam) return;
     const id = identifier.trim();
     const pass = password.trim();
@@ -355,6 +382,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
             login: id,
             password: pass,
             firstName: name.trim(),
+            lastName: "",
           }),
         });
         const { json, raw } = await readResponseJson(res);
@@ -413,8 +441,15 @@ export default function SignInForm(props: SignInFormProps = {}) {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (mode === "register" && canRegister) void onRegister();
-    else void onLogin();
+    if (mode === "register") {
+      if (needsCabinetChoice && !cabinetPick) {
+        setError("Выберите кабинет: пользователь или партнёр.");
+        return;
+      }
+      if (canRegister) void onRegister();
+      return;
+    }
+    void onLogin();
   }
 
   const inner = (
@@ -424,12 +459,45 @@ export default function SignInForm(props: SignInFormProps = {}) {
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
             {hideChrome
               ? "Войдите или зарегистрируйтесь. После входа вы попадёте в нужный кабинет (партнёр или пользователь)."
-              : roleParam == null
-                ? "Войдите учётной записью из базы (после db:seed) или откройте нужный кабинет с главной — откроется вход с проверкой роли."
+              : needsCabinetChoice
+                ? "Выберите кабинет ниже: пользователь или партнёр. Для регистрации это нужно сразу; для входа можно не выбирать — откроется кабинет по вашей учётке."
                 : "Сессия в защищённой cookie. После входа вы вернётесь в запрошенный раздел."}
           </p>
 
-          {canRegister && (
+          {needsCabinetChoice && (
+            <div className="mt-5 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Кабинет</p>
+              <div className="flex w-full gap-1 rounded-full border border-slate-200/80 bg-slate-50/80 p-1 text-sm shadow-inner">
+                <button
+                  type="button"
+                  className={`min-w-0 flex-1 rounded-full px-3 py-2 font-semibold transition-all sm:px-4 ${cabinetPick === "USER" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                  onClick={() => {
+                    setCabinetPick("USER");
+                    setRegFieldErr({});
+                    setError("");
+                  }}
+                >
+                  Пользователь
+                </button>
+                <button
+                  type="button"
+                  className={`min-w-0 flex-1 rounded-full px-3 py-2 font-semibold transition-all sm:px-4 ${cabinetPick === "PARTNER" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                  onClick={() => {
+                    setCabinetPick("PARTNER");
+                    setRegFieldErr({});
+                    setError("");
+                  }}
+                >
+                  Партнёр
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">
+                Можно открыть эту же страницу с главной с уже выбранным типом — ссылки «партнёр» / «пользователь» в подвале.
+              </p>
+            </div>
+          )}
+
+          {showAuthModeToggle && (
             <div className="mt-5 inline-flex rounded-full border border-slate-200/80 bg-slate-50/80 p-1 text-sm shadow-inner">
               <button
                 type="button"
@@ -457,6 +525,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
           )}
 
           <form className="mt-5 space-y-3" onSubmit={handleSubmit}>
+            {mode === "register" && needsCabinetChoice && !cabinetPick ? (
+              <p className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm text-amber-950">
+                Сначала выберите кабинет выше — «Пользователь» или «Партнёр» — появятся поля регистрации.
+              </p>
+            ) : null}
             {mode === "register" && canRegister && (
               <>
                 {roleParam === "PARTNER" ? (
@@ -574,7 +647,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
                 }}
                 autoComplete="username"
               />
-              {mode === "register" && canRegister ? (
+              {mode === "register" && !isSuperCabinet && (canRegister || needsCabinetChoice) ? (
                 <>
                   <p className="text-xs text-slate-500">
                     {identifier.trim().includes("@")
@@ -602,7 +675,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
                 }}
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
               />
-              {mode === "register" && canRegister ? (
+              {mode === "register" && !isSuperCabinet && (canRegister || needsCabinetChoice) ? (
                 <p className="text-xs text-slate-500">Минимум 6 символов.</p>
               ) : null}
               {regFieldErr.password ? (
@@ -647,7 +720,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
               disabled={busy}
               className="w-full rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:shadow-violet-500/35 disabled:opacity-60"
             >
-              {busy ? "Подождите…" : mode === "register" && canRegister ? "Зарегистрироваться" : "Войти"}
+              {busy
+                ? "Подождите…"
+                : mode === "register" && !isSuperCabinet
+                  ? "Зарегистрироваться"
+                  : "Войти"}
             </button>
           </form>
 

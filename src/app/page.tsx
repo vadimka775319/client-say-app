@@ -828,6 +828,11 @@ export default function Home() {
                     </a>
                   </li>
                   <li>
+                    <Link href="/sign-in" className="hover:text-slate-200">
+                      Вход и регистрация (выбор кабинета)
+                    </Link>
+                  </li>
+                  <li>
                     <Link href="/sign-in?role=PARTNER&next=/partner" className="hover:text-slate-200">
                       Вход / регистрация партнёра
                     </Link>
