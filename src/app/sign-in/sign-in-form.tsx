@@ -119,6 +119,17 @@ function extractApiErrorMessage(json: unknown | null, res: Response, raw: string
   return `Запрос не выполнен (код ${st}). Проверьте сеть; если повторяется — откройте /api/health.`;
 }
 
+function diagFromResponse(res: Response, json: unknown | null): string {
+  if (json && typeof json === "object") {
+    const er = (json as Record<string, unknown>).error;
+    if (er && typeof er === "object" && er !== null) {
+      const c = (er as Record<string, unknown>).code;
+      if (typeof c === "string" && c.trim()) return `HTTP ${res.status} · ${c.trim()}`;
+    }
+  }
+  return `HTTP ${res.status}`;
+}
+
 export type SignInFormProps = {
   /** В модалке на главной: зафиксировать роль. Если не задано — из URL ?role= */
   embeddedRole?: SessionRole | null;
@@ -132,29 +143,19 @@ export default function SignInForm(props: SignInFormProps = {}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
-  /** Роль из URL или из модалки главной; `null` — на странице /sign-in без ?role= (нужен выбор кабинета). */
-  const roleFromUrlOrEmbed =
-    embeddedRoleProp !== undefined ? embeddedRoleProp : parseSessionRole(searchParams.get("role"));
-
-  const [cabinetPick, setCabinetPick] = useState<"USER" | "PARTNER" | null>(null);
-
-  useEffect(() => {
-    if (
-      roleFromUrlOrEmbed === "USER" ||
-      roleFromUrlOrEmbed === "PARTNER" ||
-      roleFromUrlOrEmbed === "SUPER_ADMIN"
-    ) {
-      setCabinetPick(null);
-    }
-  }, [roleFromUrlOrEmbed]);
+  const urlRole = parseSessionRole(searchParams.get("role"));
+  /** В модалке «общий» режим: роль выбирают карточками локально. */
+  const [modalCabinet, setModalCabinet] = useState<"USER" | "PARTNER" | null>(null);
 
   const roleParam = useMemo((): SessionRole | null => {
-    if (roleFromUrlOrEmbed === "SUPER_ADMIN") return "SUPER_ADMIN";
-    if (roleFromUrlOrEmbed === "USER" || roleFromUrlOrEmbed === "PARTNER") return roleFromUrlOrEmbed;
-    return cabinetPick;
-  }, [roleFromUrlOrEmbed, cabinetPick]);
-
-  const needsCabinetChoice = roleFromUrlOrEmbed === null;
+    if (embeddedRoleProp !== undefined) {
+      if (embeddedRoleProp === "USER" || embeddedRoleProp === "PARTNER" || embeddedRoleProp === "SUPER_ADMIN") {
+        return embeddedRoleProp;
+      }
+      return modalCabinet;
+    }
+    return urlRole;
+  }, [embeddedRoleProp, modalCabinet, urlRole]);
 
   /** Старые ссылки с ?reason=wrong_role: сброс сессии и чистый URL без жёлтого баннера. */
   useEffect(() => {
@@ -177,6 +178,13 @@ export default function SignInForm(props: SignInFormProps = {}) {
   const canRegister = roleParam === "PARTNER" || roleParam === "USER";
   /** У админа только вход; у остальных — переключатель вход/регистрация. */
   const showAuthModeToggle = !isSuperCabinet;
+  /** Полная страница /sign-in: всегда две большие карточки + запись ?role= в адрес (не спрятано за ссылкой с главной). */
+  const showCabinetGrid = !isSuperCabinet && embeddedRoleProp === undefined;
+  /** Модалка без фиксированной роли. */
+  const showModalCabinetPicker = Boolean(hideChrome && embeddedRoleProp === null && !isSuperCabinet);
+  /** Крупные карточки выбора кабинета (страница без ?role= или модалка «общий» режим). */
+  const showCabinetChoiceCards =
+    (showCabinetGrid && !urlRole) || (showModalCabinetPicker && !modalCabinet);
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [identifier, setIdentifier] = useState("");
@@ -187,18 +195,37 @@ export default function SignInForm(props: SignInFormProps = {}) {
   const [partnerCityCustom, setPartnerCityCustom] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [lastDiag, setLastDiag] = useState<string | null>(null);
   const [regFieldErr, setRegFieldErr] = useState<Partial<Record<RegFieldKey, string>>>({});
   const [origin, setOrigin] = useState("");
+
+  function setRoleOnUrl(nextRole: "USER" | "PARTNER") {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set("role", nextRole);
+    p.delete("reason");
+    setLastDiag(null);
+    router.replace(`${pathname}?${p.toString()}`);
+  }
+
+  function pickModalCabinet(nextRole: "USER" | "PARTNER") {
+    setModalCabinet(nextRole);
+    setRegFieldErr({});
+    setError("");
+    setLastDiag(null);
+  }
 
   useEffect(() => setOrigin(window.location.origin), []);
 
   const title = useMemo(() => {
-    if (!roleParam) return `Вход в ${BRAND_NAME}`;
-    if (mode === "register" && canRegister) {
-      return `Регистрация — ${ROLE_LABEL[roleParam]}`;
+    if (isSuperCabinet) return "Кабинет супер-админа";
+    if (mode === "register") {
+      if (roleParam === "USER") return "Регистрация пользователя";
+      if (roleParam === "PARTNER") return "Регистрация партнёра";
+      return "Регистрация — выберите тип кабинета";
     }
+    if (!roleParam) return `Вход в ${BRAND_NAME}`;
     return `Вход для ${ROLE_LABEL[roleParam]}`;
-  }, [roleParam, mode, canRegister]);
+  }, [roleParam, mode, isSuperCabinet]);
 
   const registerLoginPreview = useMemo(() => {
     if (mode !== "register" || !canRegister) return null;
@@ -326,11 +353,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
   async function onRegister() {
     setError("");
     setRegFieldErr({});
-    if (needsCabinetChoice && !cabinetPick) {
-      setError("Выберите кабинет: пользователь или партнёр.");
+    setLastDiag(null);
+    if (!roleParam || !canRegister) {
+      setError("Сначала выберите кабинет: пользователь или партнёр (карточки выше).");
       return;
     }
-    if (!canRegister || !roleParam) return;
     const id = identifier.trim();
     const pass = password.trim();
     const fe: Partial<Record<RegFieldKey, string>> = {};
@@ -372,11 +399,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
     setBusy(true);
     try {
       if (roleParam === "USER") {
-        const res = await fetch("/api/auth/register", {
+        const res = await fetch(`${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/register`, {
           method: "POST",
           credentials: "include",
           cache: "no-store",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
             role: "USER",
             login: id,
@@ -388,6 +415,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
         const { json, raw } = await readResponseJson(res);
         const typed = json as { ok?: boolean; role?: SessionRole } | null;
         if (!res.ok) {
+          setLastDiag(diagFromResponse(res, json));
           const msg = extractApiErrorMessage(json, res, raw);
           const mapped = mapRegisterApiErrorToFields(msg);
           setError(mapped ? "" : msg);
@@ -404,11 +432,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
 
       const resolvedCity =
         partnerCity === PARTNER_CITY_OTHER ? partnerCityCustom.trim() : partnerCity.trim();
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch(`${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/register`, {
         method: "POST",
         credentials: "include",
         cache: "no-store",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
           role: "PARTNER",
           login: id,
@@ -421,6 +449,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
       const { json, raw } = await readResponseJson(res);
       const typed = json as { ok?: boolean; role?: SessionRole } | null;
       if (!res.ok) {
+        setLastDiag(diagFromResponse(res, json));
         const msg = extractApiErrorMessage(json, res, raw);
         const mapped = mapRegisterApiErrorToFields(msg);
         setError(mapped ? "" : msg);
@@ -433,6 +462,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
       if (typed.role === "PARTNER") clearLegacyPartnerBrowserState();
       redirectAfterAuth(typed.role);
     } catch {
+      setLastDiag("Сеть: исключение fetch");
       setError("Сеть недоступна. Попробуйте снова.");
     } finally {
       setBusy(false);
@@ -442,11 +472,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (mode === "register") {
-      if (needsCabinetChoice && !cabinetPick) {
-        setError("Выберите кабинет: пользователь или партнёр.");
+      if (!canRegister) {
+        setError("Сначала выберите кабинет: пользователь или партнёр (карточки выше).");
         return;
       }
-      if (canRegister) void onRegister();
+      void onRegister();
       return;
     }
     void onLogin();
@@ -458,44 +488,39 @@ export default function SignInForm(props: SignInFormProps = {}) {
           <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900 md:text-3xl">{title}</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
             {hideChrome
-              ? "Войдите или зарегистрируйтесь. После входа вы попадёте в нужный кабинет (партнёр или пользователь)."
-              : needsCabinetChoice
-                ? "Выберите кабинет ниже: пользователь или партнёр. Для регистрации это нужно сразу; для входа можно не выбирать — откроется кабинет по вашей учётке."
+              ? showModalCabinetPicker && !modalCabinet
+                ? "Выберите тип кабинета крупными кнопками ниже, затем войдите или зарегистрируйтесь."
+                : "Войдите или зарегистрируйтесь. После входа вы попадёте в нужный кабинет (партнёр или пользователь)."
+              : showCabinetGrid && !urlRole
+                ? "Выберите кабинет ниже: пользователь или партнёр. В адрес добавится ?role=… Для регистрации выбор обязателен; для входа можно отправить форму и без выбора — откроется кабинет по учётке."
                 : "Сессия в защищённой cookie. После входа вы вернётесь в запрошенный раздел."}
           </p>
 
-          {needsCabinetChoice && (
-            <div className="mt-5 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Кабинет</p>
-              <div className="flex w-full gap-1 rounded-full border border-slate-200/80 bg-slate-50/80 p-1 text-sm shadow-inner">
+          {showCabinetChoiceCards ? (
+            <div className="mt-6 space-y-3">
+              <p className="text-center text-xs font-semibold uppercase tracking-widest text-slate-500">Кабинет</p>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <button
                   type="button"
-                  className={`min-w-0 flex-1 rounded-full px-3 py-2 font-semibold transition-all sm:px-4 ${cabinetPick === "USER" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-                  onClick={() => {
-                    setCabinetPick("USER");
-                    setRegFieldErr({});
-                    setError("");
-                  }}
+                  className="rounded-2xl border-2 border-violet-200/90 bg-gradient-to-br from-white to-violet-50/90 p-5 text-left shadow-md transition hover:border-violet-400 hover:shadow-lg"
+                  onClick={() => (showCabinetGrid ? setRoleOnUrl("USER") : pickModalCabinet("USER"))}
                 >
-                  Пользователь
+                  <span className="text-xs font-bold uppercase tracking-widest text-violet-600">Пользователь</span>
+                  <span className="mt-2 block text-lg font-bold text-slate-900">Личный кабинет</span>
+                  <span className="mt-1 block text-sm text-slate-600">Участвовать в брифах как частное лицо.</span>
                 </button>
                 <button
                   type="button"
-                  className={`min-w-0 flex-1 rounded-full px-3 py-2 font-semibold transition-all sm:px-4 ${cabinetPick === "PARTNER" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-                  onClick={() => {
-                    setCabinetPick("PARTNER");
-                    setRegFieldErr({});
-                    setError("");
-                  }}
+                  className="rounded-2xl border-2 border-indigo-200/90 bg-gradient-to-br from-white to-indigo-50/90 p-5 text-left shadow-md transition hover:border-indigo-400 hover:shadow-lg"
+                  onClick={() => (showCabinetGrid ? setRoleOnUrl("PARTNER") : pickModalCabinet("PARTNER"))}
                 >
-                  Партнёр
+                  <span className="text-xs font-bold uppercase tracking-widest text-indigo-600">Партнёр</span>
+                  <span className="mt-2 block text-lg font-bold text-slate-900">Кабинет организации</span>
+                  <span className="mt-1 block text-sm text-slate-600">Публиковать брифы и вести точку.</span>
                 </button>
               </div>
-              <p className="text-xs text-slate-500">
-                Можно открыть эту же страницу с главной с уже выбранным типом — ссылки «партнёр» / «пользователь» в подвале.
-              </p>
             </div>
-          )}
+          ) : null}
 
           {showAuthModeToggle && (
             <div className="mt-5 inline-flex rounded-full border border-slate-200/80 bg-slate-50/80 p-1 text-sm shadow-inner">
@@ -517,6 +542,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
                   setMode("register");
                   setRegFieldErr({});
                   setError("");
+                  setLastDiag(null);
                 }}
               >
                 Регистрация
@@ -525,9 +551,9 @@ export default function SignInForm(props: SignInFormProps = {}) {
           )}
 
           <form className="mt-5 space-y-3" onSubmit={handleSubmit}>
-            {mode === "register" && needsCabinetChoice && !cabinetPick ? (
+            {mode === "register" && !isSuperCabinet && !canRegister ? (
               <p className="rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm text-amber-950">
-                Сначала выберите кабинет выше — «Пользователь» или «Партнёр» — появятся поля регистрации.
+                Сначала выберите кабинет крупными кнопками выше — «Пользователь» или «Партнёр» — затем заполните поля регистрации.
               </p>
             ) : null}
             {mode === "register" && canRegister && (
@@ -647,7 +673,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
                 }}
                 autoComplete="username"
               />
-              {mode === "register" && !isSuperCabinet && (canRegister || needsCabinetChoice) ? (
+              {mode === "register" && !isSuperCabinet && canRegister ? (
                 <>
                   <p className="text-xs text-slate-500">
                     {identifier.trim().includes("@")
@@ -675,7 +701,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
                 }}
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
               />
-              {mode === "register" && !isSuperCabinet && (canRegister || needsCabinetChoice) ? (
+              {mode === "register" && !isSuperCabinet && canRegister ? (
                 <p className="text-xs text-slate-500">Минимум 6 символов.</p>
               ) : null}
               {regFieldErr.password ? (
@@ -683,6 +709,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
               ) : null}
             </div>
             {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
+            {lastDiag ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-[11px] text-slate-600" title="Ответ сервера">
+                {lastDiag}
+              </p>
+            ) : null}
             {error &&
               (error.includes("База данных") ||
                 error.includes("DATABASE_URL") ||
