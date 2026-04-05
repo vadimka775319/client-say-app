@@ -14,7 +14,7 @@ type CabinetShellProps = {
 };
 
 /**
- * Общая шапка кабинетов: бренд, контекст, выход. Доступ к маршруту проверяется в `src/middleware.ts` (через `proxy.ts`).
+ * Общая шапка кабинетов: бренд, контекст, выход. Доступ к маршруту проверяется в `src/proxy.ts` (Next.js 16).
  */
 export function CabinetShell({ title, subtitle, children }: CabinetShellProps) {
   const router = useRouter();
