@@ -1,7 +1,11 @@
 import { cookies } from "next/headers";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { canonicalPhoneRu } from "@/lib/login-identity";
 import { SESSION_COOKIE_NAME, verifySession, type SessionRole } from "@/lib/auth-session";
 import type { Role, User } from "@prisma/client";
+
+export { canonicalPhoneRu, isStoredRuPhone, normalizeLogin } from "@/lib/login-identity";
 
 export type SessionUser = {
   id: string;
@@ -42,23 +46,12 @@ export async function requireRole(allowed: Role[]): Promise<SessionUser> {
   return session;
 }
 
-export async function hashPassword(plain: string): Promise<string> {
-  const bcrypt = await import("bcryptjs");
-  return bcrypt.hash(plain, 12);
+export function hashPassword(plain: string): string {
+  return bcrypt.hashSync(plain, 12);
 }
 
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  const bcrypt = await import("bcryptjs");
-  return bcrypt.compare(plain, hash);
-}
-
-/** Единый вид телефона РФ в БД: +7XXXXXXXXXX (10 цифр после кода страны). */
-export function canonicalPhoneRu(input: string): string {
-  const d = input.replace(/\D/g, "");
-  if (d.length === 11 && d.startsWith("8")) return `+7${d.slice(1)}`;
-  if (d.length === 11 && d.startsWith("7")) return `+${d}`;
-  if (d.length === 10) return `+7${d}`;
-  return input.trim();
+export function verifyPassword(plain: string, hash: string): boolean {
+  return bcrypt.compareSync(plain, hash);
 }
 
 export function prismaRoleToSessionRole(r: Role): SessionRole {
@@ -72,13 +65,6 @@ export function prismaRoleToSessionRole(r: Role): SessionRole {
     default:
       throw new Error(`Unsupported role for session: ${String(r)}`);
   }
-}
-
-export function normalizeLogin(login: string): { email: string | null; phone: string | null } {
-  const t = login.trim();
-  if (!t) return { email: null, phone: null };
-  if (t.includes("@")) return { email: t.toLowerCase(), phone: null };
-  return { email: null, phone: canonicalPhoneRu(t) };
 }
 
 export async function findUserByLogin(login: string): Promise<User | null> {

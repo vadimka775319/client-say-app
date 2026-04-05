@@ -19,6 +19,8 @@ const nextConfig: NextConfig = {
   async headers() {
     const noStore = "private, no-store, must-revalidate";
     return [
+      { source: "/", headers: [{ key: "Cache-Control", value: noStore }] },
+      { source: "/brief/:path*", headers: [{ key: "Cache-Control", value: noStore }] },
       { source: "/partner", headers: [{ key: "Cache-Control", value: noStore }] },
       { source: "/partner/:path*", headers: [{ key: "Cache-Control", value: noStore }] },
       { source: "/user", headers: [{ key: "Cache-Control", value: noStore }] },

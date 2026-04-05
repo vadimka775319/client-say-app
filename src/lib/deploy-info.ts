@@ -7,6 +7,8 @@ export type DeployInfoSource = "file" | "git" | "env" | "none";
 export type DeployInfo = {
   gitShort: string | null;
   deployedAt: string | null;
+  /** Unix ms из deploy-meta.json при сборке — для проверки актуальности без кэша */
+  buildEpoch: number | null;
   source: DeployInfoSource;
 };
 
@@ -18,10 +20,15 @@ export function getDeployInfo(): DeployInfo {
   try {
     const p = join(process.cwd(), "public", "deploy-meta.json");
     if (existsSync(p)) {
-      const j = JSON.parse(readFileSync(p, "utf8")) as { gitShort?: string; deployedAt?: string };
+      const j = JSON.parse(readFileSync(p, "utf8")) as {
+        gitShort?: string;
+        deployedAt?: string;
+        buildEpoch?: number;
+      };
       return {
         gitShort: j.gitShort ?? null,
         deployedAt: j.deployedAt ?? null,
+        buildEpoch: typeof j.buildEpoch === "number" && Number.isFinite(j.buildEpoch) ? j.buildEpoch : null,
         source: "file",
       };
     }
@@ -37,7 +44,7 @@ export function getDeployInfo(): DeployInfo {
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     if (sha && /^[0-9a-f]+$/i.test(sha)) {
-      return { gitShort: sha, deployedAt: null, source: "git" };
+      return { gitShort: sha, deployedAt: null, buildEpoch: null, source: "git" };
     }
   } catch {
     // нет git / не репозиторий
@@ -46,7 +53,7 @@ export function getDeployInfo(): DeployInfo {
   const gitShort = process.env.DEPLOY_GIT_SHA?.replace(/^"|"$/g, "") ?? null;
   const deployedAt = process.env.DEPLOYED_AT?.replace(/^"|"$/g, "") ?? null;
   if (gitShort || deployedAt) {
-    return { gitShort, deployedAt, source: "env" };
+    return { gitShort, deployedAt, buildEpoch: null, source: "env" };
   }
-  return { gitShort: null, deployedAt: null, source: "none" };
+  return { gitShort: null, deployedAt: null, buildEpoch: null, source: "none" };
 }

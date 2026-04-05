@@ -8,6 +8,7 @@ import { demoAuth } from "@/lib/mock-data";
 import { cabinetPath, parseSessionRole, resolvePostLoginRedirect } from "@/lib/auth-routes";
 import { BRAND_NAME } from "@/lib/brand";
 import { PARTNER_CITY_OTHER, partnerRegistrationCities } from "@/lib/site-config";
+import { isStoredRuPhone, normalizeLogin } from "@/lib/login-identity";
 
 /** Старые ключи без привязки к аккаунту — иначе новый партнёр видит данные предыдущего входа в этом браузере. */
 function clearLegacyPartnerBrowserState() {
@@ -50,6 +51,61 @@ function validateLoginField(login: string): string | null {
   return digits.length >= 10 ? null : "Телефон: не меньше 10 цифр (или укажите email с символом @).";
 }
 
+/** Регистрация: те же правила, что на сервере (в т.ч. итоговый вид телефона +7…10 цифр). */
+function validateRegisterLogin(login: string): string | null {
+  const t = login.trim();
+  if (!t) return "Укажите email или телефон — это будет логином для входа.";
+  if (t.includes("@")) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)
+      ? null
+      : "Email: нужны символ @ и домен, например partner@mail.ru";
+  }
+  const digits = t.replace(/\D/g, "");
+  if (digits.length < 10) {
+    return "Телефон: минимум 10 цифр номера (РФ), например 89563654789 или +79563654789.";
+  }
+  const n = normalizeLogin(t);
+  if (!n.email && (!n.phone || !isStoredRuPhone(n.phone))) {
+    return "Телефон не распознан. Попробуйте 10 цифр после кода страны: 9563654789, 89563654789.";
+  }
+  return null;
+}
+
+type RegFieldKey = "company" | "city" | "login" | "password" | "name";
+
+async function readResponseJson(res: Response): Promise<{ json: unknown | null; raw: string }> {
+  const raw = await res.text();
+  if (!raw.trim()) return { json: null, raw };
+  try {
+    return { json: JSON.parse(raw) as unknown, raw };
+  } catch {
+    return { json: null, raw };
+  }
+}
+
+function extractApiErrorMessage(json: unknown | null, res: Response): string {
+  if (json && typeof json === "object") {
+    const o = json as Record<string, unknown>;
+    const er = o.error;
+    if (er && typeof er === "object" && er !== null) {
+      const m = (er as Record<string, unknown>).message;
+      if (typeof m === "string" && m.trim()) return m.trim();
+    }
+    const top = o.message;
+    if (typeof top === "string" && top.trim()) return top.trim();
+  }
+  if (res.status === 503) {
+    return "Сервис временно недоступен. Откройте /api/health — поле db должно быть up; проверьте AUTH_SECRET и DATABASE_URL на сервере.";
+  }
+  if (res.status >= 500) {
+    return "Ошибка сервера. Проверьте /api/health, DATABASE_URL и AUTH_SECRET (не короче 32 символов).";
+  }
+  if (res.status === 409) {
+    return "Этот email или телефон уже зарегистрирован. Войдите или укажите другой логин.";
+  }
+  return "Запрос не выполнен. Проверьте интернет и попробуйте снова.";
+}
+
 export type SignInFormProps = {
   /** В модалке на главной: зафиксировать роль. Если не задано — из URL ?role= */
   embeddedRole?: SessionRole | null;
@@ -65,50 +121,23 @@ export default function SignInForm(props: SignInFormProps = {}) {
   const next = searchParams.get("next");
   const roleParam =
     embeddedRoleProp !== undefined ? embeddedRoleProp : parseSessionRole(searchParams.get("role"));
-  const reason = searchParams.get("reason");
 
-  /** Баннер «другая учётка» только если в cookie реально есть сессия и она не подходит под открытый кабинет. */
-  const [wrongRoleActive, setWrongRoleActive] = useState(false);
-
+  /** Старые ссылки с ?reason=wrong_role: сброс сессии и чистый URL без жёлтого баннера. */
   useEffect(() => {
-    if (reason !== "wrong_role") {
-      setWrongRoleActive(false);
-      return;
-    }
+    if (searchParams.get("reason") !== "wrong_role") return;
     let cancelled = false;
     void (async () => {
-      const r = await fetch("/api/auth/session", { credentials: "include", cache: "no-store" });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; role?: string };
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include", cache: "no-store" });
       if (cancelled) return;
-
-      const stripReasonFromUrl = () => {
-        const p = new URLSearchParams(searchParams.toString());
-        p.delete("reason");
-        const qs = p.toString();
-        router.replace(qs ? `${pathname}?${qs}` : pathname);
-      };
-
-      if (!j.ok) {
-        stripReasonFromUrl();
-        setWrongRoleActive(false);
-        return;
-      }
-      if (!roleParam) {
-        stripReasonFromUrl();
-        setWrongRoleActive(false);
-        return;
-      }
-      if (j.role === roleParam) {
-        stripReasonFromUrl();
-        setWrongRoleActive(false);
-        return;
-      }
-      setWrongRoleActive(true);
+      const p = new URLSearchParams(searchParams.toString());
+      p.delete("reason");
+      const qs = p.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
     })();
     return () => {
       cancelled = true;
     };
-  }, [reason, roleParam, router, pathname, searchParams]);
+  }, [pathname, router, searchParams]);
 
   const isSuperCabinet = roleParam === "SUPER_ADMIN";
   const canRegister = roleParam === "PARTNER" || roleParam === "USER";
@@ -122,6 +151,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
   const [partnerCityCustom, setPartnerCityCustom] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [regFieldErr, setRegFieldErr] = useState<Partial<Record<RegFieldKey, string>>>({});
   const [origin, setOrigin] = useState("");
 
   useEffect(() => setOrigin(window.location.origin), []);
@@ -131,7 +161,58 @@ export default function SignInForm(props: SignInFormProps = {}) {
     return `Вход для ${ROLE_LABEL[roleParam]}`;
   }, [roleParam]);
 
+  const registerLoginPreview = useMemo(() => {
+    if (mode !== "register" || !canRegister) return null;
+    const id = identifier.trim();
+    if (!id || id.includes("@")) return null;
+    const n = normalizeLogin(id);
+    if (n.phone && isStoredRuPhone(n.phone)) return n.phone;
+    return null;
+  }, [mode, canRegister, identifier]);
+
   const demoHint = hintForRole(roleParam);
+
+  function patchRegFieldErr(key: RegFieldKey, patch: string | undefined) {
+    setRegFieldErr((prev) => {
+      const next = { ...prev };
+      if (patch === undefined || patch === "") delete next[key];
+      else next[key] = patch;
+      return next;
+    });
+  }
+
+  /** true = текст показан у конкретного поля, общий блок ошибки не дублируем */
+  function mapRegisterApiErrorToFields(msg: string): boolean {
+    const m = msg.toLowerCase();
+    if (
+      m.includes("телефон") ||
+      m.includes("email") ||
+      m.includes("уже зарегистрирован") ||
+      m.includes("уже занят") ||
+      m.includes("укажите email") ||
+      m.includes("российск")
+    ) {
+      patchRegFieldErr("login", msg);
+      return true;
+    }
+    if (m.includes("компани") || m.includes("организац")) {
+      patchRegFieldErr("company", msg);
+      return true;
+    }
+    if (m.includes("город")) {
+      patchRegFieldErr("city", msg);
+      return true;
+    }
+    if (m.includes("парол")) {
+      patchRegFieldErr("password", msg);
+      return true;
+    }
+    if (m.includes("имя")) {
+      patchRegFieldErr("name", msg);
+      return true;
+    }
+    return false;
+  }
 
   /** Полная перезагрузка страницы — иначе Next.js иногда не подхватывает Set-Cookie до client navigation. */
   const redirectAfterAuth = useCallback(
@@ -154,26 +235,6 @@ export default function SignInForm(props: SignInFormProps = {}) {
       return JSON.parse(raw) as T;
     } catch {
       return null;
-    }
-  }
-
-  async function logoutHere() {
-    setBusy(true);
-    setError("");
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-      });
-      const q = new URLSearchParams();
-      if (next) q.set("next", next);
-      if (roleParam) q.set("role", roleParam);
-      const suffix = q.toString();
-      router.replace(suffix ? `/sign-in?${suffix}` : "/sign-in");
-      router.refresh();
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -221,27 +282,49 @@ export default function SignInForm(props: SignInFormProps = {}) {
 
   async function onRegister() {
     setError("");
+    setRegFieldErr({});
     if (!canRegister || !roleParam) return;
     const id = identifier.trim();
     const pass = password.trim();
-    if (!id || !pass || pass.length < 6) {
-      setError("Минимум 6 символов в пароле и непустой логин.");
-      return;
+    const fe: Partial<Record<RegFieldKey, string>> = {};
+
+    if (roleParam === "USER") {
+      if (!name.trim()) fe.name = "Укажите, как к вам обращаться (имя).";
+    } else {
+      if (!companyName.trim()) {
+        fe.company = "Введите название компании или бренда точки.";
+      } else if (companyName.trim().length < 2) {
+        fe.company = "Название слишком короткое (минимум 2 символа).";
+      }
+      const resolvedCity =
+        partnerCity === PARTNER_CITY_OTHER ? partnerCityCustom.trim() : partnerCity.trim();
+      if (!partnerCity) {
+        fe.city = "Выберите город из списка.";
+      } else if (!resolvedCity) {
+        fe.city = "Для «Другой город» введите название населённого пункта.";
+      } else if (resolvedCity.length > 120) {
+        fe.city = "Название города не длиннее 120 символов.";
+      }
     }
-    const loginErr = validateLoginField(id);
-    if (loginErr) {
-      setError(loginErr);
+
+    if (!id) fe.login = "Укажите email (с @) или телефон.";
+    else {
+      const le = validateRegisterLogin(id);
+      if (le) fe.login = le;
+    }
+
+    if (!pass) fe.password = "Придумайте пароль.";
+    else if (pass.length < 6) fe.password = "Пароль: не меньше 6 символов.";
+
+    if (Object.keys(fe).length > 0) {
+      setRegFieldErr(fe);
+      setError("");
       return;
     }
 
     setBusy(true);
     try {
       if (roleParam === "USER") {
-        if (!name.trim()) {
-          setError("Укажите имя.");
-          setBusy(false);
-          return;
-        }
         const res = await fetch("/api/auth/register", {
           method: "POST",
           credentials: "include",
@@ -254,30 +337,25 @@ export default function SignInForm(props: SignInFormProps = {}) {
             firstName: name.trim(),
           }),
         });
-        const data = await readApiResponse<{ ok?: boolean; role?: SessionRole; error?: { message?: string } }>(res);
+        const { json } = await readResponseJson(res);
+        const typed = json as { ok?: boolean; role?: SessionRole } | null;
         if (!res.ok) {
-          setError(data?.error?.message ?? "Регистрация не удалась.");
+          const msg = extractApiErrorMessage(json, res);
+          const mapped = mapRegisterApiErrorToFields(msg);
+          setError(mapped ? "" : msg);
           return;
         }
-        if (data?.role) {
-          if (data.role === "PARTNER") clearLegacyPartnerBrowserState();
-          redirectAfterAuth(data.role);
+        if (!typed?.role) {
+          setError("Ответ сервера неполный. Попробуйте войти с тем же email или телефоном.");
+          return;
         }
+        if (typed.role === "PARTNER") clearLegacyPartnerBrowserState();
+        redirectAfterAuth(typed.role);
         return;
       }
 
-      if (!companyName.trim()) {
-        setError("Укажите название компании.");
-        setBusy(false);
-        return;
-      }
       const resolvedCity =
         partnerCity === PARTNER_CITY_OTHER ? partnerCityCustom.trim() : partnerCity.trim();
-      if (!partnerCity || !resolvedCity) {
-        setError("Выберите город из списка или укажите название в поле «Другой город».");
-        setBusy(false);
-        return;
-      }
       const res = await fetch("/api/auth/register", {
         method: "POST",
         credentials: "include",
@@ -292,15 +370,20 @@ export default function SignInForm(props: SignInFormProps = {}) {
           firstName: name.trim() || "Партнёр",
         }),
       });
-      const data = await readApiResponse<{ ok?: boolean; role?: SessionRole; error?: { message?: string } }>(res);
+      const { json } = await readResponseJson(res);
+      const typed = json as { ok?: boolean; role?: SessionRole } | null;
       if (!res.ok) {
-        setError(data?.error?.message ?? "Регистрация не удалась.");
+        const msg = extractApiErrorMessage(json, res);
+        const mapped = mapRegisterApiErrorToFields(msg);
+        setError(mapped ? "" : msg);
         return;
       }
-      if (data?.role) {
-        if (data.role === "PARTNER") clearLegacyPartnerBrowserState();
-        redirectAfterAuth(data.role);
+      if (!typed?.role) {
+        setError("Ответ сервера неполный. Попробуйте войти с тем же email или телефоном.");
+        return;
       }
+      if (typed.role === "PARTNER") clearLegacyPartnerBrowserState();
+      redirectAfterAuth(typed.role);
     } catch {
       setError("Сеть недоступна. Попробуйте снова.");
     } finally {
@@ -326,36 +409,27 @@ export default function SignInForm(props: SignInFormProps = {}) {
                 : "Сессия в защищённой cookie. После входа вы вернётесь в запрошенный раздел."}
           </p>
 
-          {wrongRoleActive ? (
-            <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-amber-200/80 bg-amber-50/90 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                В этом браузере уже выполнен вход в другой аккаунт. Нажмите «Выйти», затем войдите или зарегистрируйтесь
-                здесь.
-              </span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={logoutHere}
-                className="shrink-0 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
-              >
-                Выйти
-              </button>
-            </div>
-          ) : null}
-
           {canRegister && (
             <div className="mt-5 inline-flex rounded-full border border-slate-200/80 bg-slate-50/80 p-1 text-sm shadow-inner">
               <button
                 type="button"
                 className={`rounded-full px-4 py-2 font-semibold transition-all ${mode === "login" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-                onClick={() => setMode("login")}
+                onClick={() => {
+                  setMode("login");
+                  setRegFieldErr({});
+                  setError("");
+                }}
               >
                 Вход
               </button>
               <button
                 type="button"
                 className={`rounded-full px-4 py-2 font-semibold transition-all ${mode === "register" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-                onClick={() => setMode("register")}
+                onClick={() => {
+                  setMode("register");
+                  setRegFieldErr({});
+                  setError("");
+                }}
               >
                 Регистрация
               </button>
@@ -367,84 +441,164 @@ export default function SignInForm(props: SignInFormProps = {}) {
               <>
                 {roleParam === "PARTNER" ? (
                   <>
-                    <input
-                      className="input-cs"
-                      placeholder="Название компании"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      autoComplete="organization"
-                    />
-                    <label className="block text-xs font-medium text-slate-600">
-                      Город
-                      <select
-                        className="input-cs mt-1"
-                        value={partnerCity}
-                        onChange={(e) => setPartnerCity(e.target.value)}
-                        autoComplete="address-level1"
-                      >
-                        <option value="">— Выберите город —</option>
-                        {partnerRegistrationCities.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                        <option value={PARTNER_CITY_OTHER}>Другой город…</option>
-                      </select>
-                    </label>
-                    {partnerCity === PARTNER_CITY_OTHER ? (
+                    <div className="space-y-1">
                       <input
-                        className="input-cs"
-                        placeholder="Название города"
-                        value={partnerCityCustom}
-                        onChange={(e) => setPartnerCityCustom(e.target.value)}
+                        className={`input-cs ${regFieldErr.company ? "ring-2 ring-rose-400/60" : ""}`}
+                        placeholder="Название компании"
+                        value={companyName}
+                        onChange={(e) => {
+                          setCompanyName(e.target.value);
+                          patchRegFieldErr("company", undefined);
+                        }}
+                        autoComplete="organization"
                       />
+                      <p className="text-xs text-slate-500">Как в договоре или на вывеске — так вас увидят пользователи.</p>
+                      {regFieldErr.company ? (
+                        <p className="text-xs font-medium text-rose-600">{regFieldErr.company}</p>
+                      ) : null}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Город
+                        <select
+                          className={`input-cs mt-1 ${regFieldErr.city ? "ring-2 ring-rose-400/60" : ""}`}
+                          value={partnerCity}
+                          onChange={(e) => {
+                            setPartnerCity(e.target.value);
+                            patchRegFieldErr("city", undefined);
+                          }}
+                          autoComplete="address-level1"
+                        >
+                          <option value="">— Выберите город —</option>
+                          {partnerRegistrationCities.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                          <option value={PARTNER_CITY_OTHER}>Другой город…</option>
+                        </select>
+                      </label>
+                      <p className="text-xs text-slate-500">Нужен для подбора «партнёры рядом».</p>
+                      {regFieldErr.city && partnerCity !== PARTNER_CITY_OTHER ? (
+                        <p className="text-xs font-medium text-rose-600">{regFieldErr.city}</p>
+                      ) : null}
+                    </div>
+                    {partnerCity === PARTNER_CITY_OTHER ? (
+                      <div className="space-y-1">
+                        <input
+                          className={`input-cs ${regFieldErr.city ? "ring-2 ring-rose-400/60" : ""}`}
+                          placeholder="Название города"
+                          value={partnerCityCustom}
+                          onChange={(e) => {
+                            setPartnerCityCustom(e.target.value);
+                            patchRegFieldErr("city", undefined);
+                          }}
+                        />
+                        {regFieldErr.city ? (
+                          <p className="text-xs font-medium text-rose-600">{regFieldErr.city}</p>
+                        ) : null}
+                      </div>
                     ) : null}
                   </>
                 ) : (
-                  <input
-                    className="input-cs"
-                    placeholder="Имя"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="given-name"
-                  />
+                  <div className="space-y-1">
+                    <input
+                      className={`input-cs ${regFieldErr.name ? "ring-2 ring-rose-400/60" : ""}`}
+                      placeholder="Имя"
+                      value={name}
+                      onChange={(e) => {
+                        setName(e.target.value);
+                        patchRegFieldErr("name", undefined);
+                      }}
+                      autoComplete="given-name"
+                    />
+                    <p className="text-xs text-slate-500">Как к вам обращаться в сервисе.</p>
+                    {regFieldErr.name ? (
+                      <p className="text-xs font-medium text-rose-600">{regFieldErr.name}</p>
+                    ) : null}
+                  </div>
                 )}
                 {roleParam === "PARTNER" && (
-                  <input
-                    className="input-cs"
-                    placeholder="Имя контакта (необязательно)"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="name"
-                  />
+                  <div className="space-y-1">
+                    <input
+                      className={`input-cs ${regFieldErr.name ? "ring-2 ring-rose-400/60" : ""}`}
+                      placeholder="Имя контакта (необязательно)"
+                      value={name}
+                      onChange={(e) => {
+                        setName(e.target.value);
+                        patchRegFieldErr("name", undefined);
+                      }}
+                      autoComplete="name"
+                    />
+                    {regFieldErr.name ? (
+                      <p className="text-xs font-medium text-rose-600">{regFieldErr.name}</p>
+                    ) : null}
+                  </div>
                 )}
               </>
             )}
-            <input
-              className="input-cs"
-              placeholder={
-                isSuperCabinet && mode === "login"
-                  ? "clientsay@mail.ru"
-                  : "Email (с @) или телефон (от 10 цифр)"
-              }
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              autoComplete="username"
-            />
-            <input
-              type="password"
-              className="input-cs"
-              placeholder="Пароль"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={mode === "register" ? "new-password" : "current-password"}
-            />
+            <div className="space-y-1">
+              <input
+                className={`input-cs ${regFieldErr.login ? "ring-2 ring-rose-400/60" : ""}`}
+                placeholder={
+                  isSuperCabinet && mode === "login"
+                    ? "clientsay@mail.ru"
+                    : mode === "register"
+                      ? "Email (с @) или телефон — 10 цифр"
+                      : "Email (с @) или телефон (от 10 цифр)"
+                }
+                value={identifier}
+                onChange={(e) => {
+                  setIdentifier(e.target.value);
+                  patchRegFieldErr("login", undefined);
+                }}
+                autoComplete="username"
+              />
+              {mode === "register" && canRegister ? (
+                <>
+                  <p className="text-xs text-slate-500">
+                    {identifier.trim().includes("@")
+                      ? "Этот email будет логином для входа."
+                      : "Телефон РФ: 10 цифр номера (можно с 8 или +7)."}
+                  </p>
+                  {registerLoginPreview ? (
+                    <p className="text-xs font-medium text-emerald-700">Сохраним в базе как: {registerLoginPreview}</p>
+                  ) : null}
+                </>
+              ) : null}
+              {regFieldErr.login ? (
+                <p className="text-xs font-medium text-rose-600">{regFieldErr.login}</p>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <input
+                type="password"
+                className={`input-cs ${regFieldErr.password ? "ring-2 ring-rose-400/60" : ""}`}
+                placeholder="Пароль"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  patchRegFieldErr("password", undefined);
+                }}
+                autoComplete={mode === "register" ? "new-password" : "current-password"}
+              />
+              {mode === "register" && canRegister ? (
+                <p className="text-xs text-slate-500">Минимум 6 символов.</p>
+              ) : null}
+              {regFieldErr.password ? (
+                <p className="text-xs font-medium text-rose-600">{regFieldErr.password}</p>
+              ) : null}
+            </div>
             {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
             {error &&
               (error.includes("База данных") ||
                 error.includes("DATABASE_URL") ||
                 error.includes("Vercel") ||
-                error.includes("PostgreSQL")) && (
+                error.includes("PostgreSQL") ||
+                error.includes("/api/health") ||
+                error.includes("AUTH_SECRET") ||
+                error.includes("Ошибка сервера") ||
+                error.includes("Сервис временно")) && (
                 <div className="rounded-xl border border-amber-200/90 bg-amber-50/95 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
                   <p className="font-semibold text-amber-900">Почему так, если prisma на ПК уже «ок»?</p>
                   <p className="mt-1">

@@ -1,5 +1,10 @@
 name: CI and deploy
 
+# Новый push отменяет устаревший прогон — быстрее дойти до актуального деплоя
+concurrency:
+  group: client-say-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: ["main"]
@@ -259,7 +264,7 @@ jobs:
               export PATH="$NPM_PREFIX/bin:$PATH"
             fi
             export AUTH_SECRET="${AUTH_SECRET:-ci-build-placeholder-secret-min-32-chars!!}"
-            npm ci
+            npm ci --no-audit --fund=false
             PUSH_OK=0
             for t in 1 2 3 4 5 6 7 8 9 10 11 12; do
               if npx prisma db push; then
@@ -286,8 +291,12 @@ jobs:
               exit 1
             fi
             echo "=== Prisma: db push OK — схема из schema.prisma применена к БД ==="
-            npm run db:seed
-            echo "=== Prisma: db seed OK — демо-аккаунты и приз обновлены (остаток призов не сбрасывается) ==="
+            if [ "${CLIENTSAY_SKIP_SEED:-0}" = "1" ]; then
+              echo "=== SKIP db:seed (в .env на VPS: CLIENTSAY_SKIP_SEED=1) — быстрее деплой ==="
+            else
+              npm run db:seed
+              echo "=== Prisma: db seed OK — демо-аккаунты обновлены (пропуск: CLIENTSAY_SKIP_SEED=1) ==="
+            fi
             echo "=== npm run build (внутри: write-deploy-meta + prisma generate + next build) ==="
             npm run build
           )
@@ -297,9 +306,22 @@ jobs:
             npm install -g pm2
           fi
 
-          pm2 delete client-say-app 2>/dev/null || true
-          pm2 start ecosystem.config.cjs
+          if pm2 describe client-say-app >/dev/null 2>&1; then
+            echo "=== pm2 reload (быстрее, чем delete+start) ==="
+            pm2 reload client-say-app --update-env
+          else
+            echo "=== pm2 start (первый запуск) ==="
+            pm2 start ecosystem.config.cjs
+          fi
           pm2 save
+
+          echo "=== Сброс кэша прокси: reload nginx при наличии (без интерактива) ==="
+          if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null; then
+            sudo -n systemctl reload nginx 2>/dev/null || true
+          fi
+          if command -v nginx >/dev/null 2>&1; then
+            sudo -n nginx -s reload 2>/dev/null || true
+          fi
 
           PORT="${PORT:-3000}"
           HEALTH_OK=0

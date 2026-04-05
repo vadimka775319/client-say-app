@@ -16,7 +16,7 @@ export const prisma = client;
 export function isPrismaConnectionError(e: unknown): boolean {
   const code =
     typeof e === "object" && e !== null && "code" in e ? String((e as { code?: string }).code) : "";
-  if (["P1001", "P1012", "P1017", "P2024"].includes(code)) return true;
+  if (["P1000", "P1001", "P1012", "P1017", "P2024"].includes(code)) return true;
   const msg = e instanceof Error ? e.message : String(e);
   if (!msg) return false;
   const lower = msg.toLowerCase();

@@ -26,8 +26,9 @@ export async function proxy(request: NextRequest) {
   }
 
   if (payload.role !== required) {
-    signInUrl.searchParams.set("reason", "wrong_role");
-    return NextResponse.redirect(signInUrl);
+    const res = NextResponse.redirect(signInUrl);
+    res.cookies.delete(SESSION_COOKIE_NAME);
+    return res;
   }
 
   return NextResponse.next();

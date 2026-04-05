@@ -22,6 +22,8 @@ try {
 const payload = {
   gitShort,
   deployedAt: new Date().toISOString(),
+  /** Меняется каждый build — удобно проверять, что не отдаётся старый кэш */
+  buildEpoch: Date.now(),
 };
 
 fs.writeFileSync(out, JSON.stringify(payload), "utf8");
