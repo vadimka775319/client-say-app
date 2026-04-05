@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE_NAME, verifySession } from "@/lib/auth-session";
+import { SESSION_COOKIE_NAME, verifySession, type SessionRole } from "@/lib/auth-session";
 import type { Role, User } from "@prisma/client";
 
 export type SessionUser = {
@@ -52,16 +52,63 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
   return bcrypt.compare(plain, hash);
 }
 
+/** Единый вид телефона РФ в БД: +7XXXXXXXXXX (10 цифр после кода страны). */
+export function canonicalPhoneRu(input: string): string {
+  const d = input.replace(/\D/g, "");
+  if (d.length === 11 && d.startsWith("8")) return `+7${d.slice(1)}`;
+  if (d.length === 11 && d.startsWith("7")) return `+${d}`;
+  if (d.length === 10) return `+7${d}`;
+  return input.trim();
+}
+
+export function prismaRoleToSessionRole(r: Role): SessionRole {
+  switch (r) {
+    case "USER":
+      return "USER";
+    case "PARTNER":
+      return "PARTNER";
+    case "SUPER_ADMIN":
+      return "SUPER_ADMIN";
+    default:
+      throw new Error(`Unsupported role for session: ${String(r)}`);
+  }
+}
+
 export function normalizeLogin(login: string): { email: string | null; phone: string | null } {
   const t = login.trim();
   if (!t) return { email: null, phone: null };
   if (t.includes("@")) return { email: t.toLowerCase(), phone: null };
-  return { email: null, phone: t };
+  return { email: null, phone: canonicalPhoneRu(t) };
 }
 
 export async function findUserByLogin(login: string): Promise<User | null> {
-  const { email, phone } = normalizeLogin(login);
-  if (email) return prisma.user.findUnique({ where: { email } });
-  if (phone) return prisma.user.findUnique({ where: { phone } });
+  const t = login.trim();
+  if (!t) return null;
+  if (t.includes("@")) {
+    return prisma.user.findUnique({ where: { email: t.toLowerCase() } });
+  }
+  const d = t.replace(/\D/g, "");
+  const variants = new Set<string>();
+  variants.add(t);
+  variants.add(canonicalPhoneRu(t));
+  if (d) variants.add(d);
+  if (d.length === 11 && d.startsWith("8")) {
+    variants.add(`+7${d.slice(1)}`);
+    variants.add(`7${d.slice(1)}`);
+  }
+  if (d.length === 11 && d.startsWith("7")) {
+    variants.add(`+${d}`);
+    variants.add(`8${d.slice(1)}`);
+  }
+  if (d.length === 10) {
+    variants.add(`+7${d}`);
+    variants.add(`8${d}`);
+    variants.add(`7${d}`);
+  }
+  for (const p of variants) {
+    if (!p) continue;
+    const u = await prisma.user.findUnique({ where: { phone: p } });
+    if (u) return u;
+  }
   return null;
 }

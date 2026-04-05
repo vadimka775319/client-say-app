@@ -3,7 +3,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { dbUnreachableUserMessage } from "@/lib/db-unreachable-message";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
-import { hashPassword, normalizeLogin } from "@/lib/auth-server";
+import { findUserByLogin, hashPassword, normalizeLogin, prismaRoleToSessionRole } from "@/lib/auth-server";
 import { SESSION_COOKIE_NAME, sessionCookieOptions, signSession, type SessionRole } from "@/lib/auth-session";
 
 const registerBody = z.discriminatedUnion("role", [
@@ -77,6 +77,19 @@ export async function POST(req: Request) {
     }
   }
 
+  const existing = await findUserByLogin(data.login);
+  if (existing) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "duplicate",
+          message: "Этот email или телефон уже зарегистрирован. Войдите с тем же паролем.",
+        },
+      },
+      { status: 409 },
+    );
+  }
+
   const passwordHash = await hashPassword(data.password);
 
   try {
@@ -99,7 +112,8 @@ export async function POST(req: Request) {
           role: Role.USER,
         },
       });
-      return jsonWithSession(req, user.id, "USER", { ok: true as const, role: "USER" as const });
+      const sr = prismaRoleToSessionRole(user.role);
+      return jsonWithSession(req, user.id, sr, { ok: true as const, role: sr });
     }
 
     const { email, phone } = normalizeLogin(data.login);
@@ -128,8 +142,10 @@ export async function POST(req: Request) {
       },
     });
 
-    return jsonWithSession(req, user.id, "PARTNER", { ok: true as const, role: "PARTNER" as const });
+    const sr = prismaRoleToSessionRole(user.role);
+    return jsonWithSession(req, user.id, sr, { ok: true as const, role: sr });
   } catch (e: unknown) {
+    console.error("[auth/register]", e);
     const code = typeof e === "object" && e !== null && "code" in e ? (e as { code?: string }).code : undefined;
     if (code === "P2002") {
       return NextResponse.json(
@@ -149,18 +165,65 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
+    if (e instanceof Prisma.PrismaClientValidationError) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "validation",
+            message: "Проверьте поля: email или телефон, название компании, город.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+    const em = e instanceof Error ? e.message : String(e);
+    if (em.includes("AUTH_SECRET") || em.includes("32 characters")) {
+      return NextResponse.json(
+        { error: { code: "config", message: "На сервере не задан AUTH_SECRET (не менее 32 символов)." } },
+        { status: 503 },
+      );
+    }
     const msg =
-      e instanceof Error && process.env.NODE_ENV === "development"
-        ? `Ошибка сервера: ${e.message}`
+      process.env.NODE_ENV === "development"
+        ? `Ошибка сервера: ${em}`
         : "Ошибка регистрации. Попробуйте снова или укажите другой email/телефон.";
     return NextResponse.json({ error: { code: "internal", message: msg } }, { status: 500 });
   }
 }
 
 async function jsonWithSession(req: Request, userId: string, role: SessionRole, body: Record<string, unknown>) {
-  const token = await signSession(userId, role);
-  const res = NextResponse.json(body);
-  res.headers.set("Cache-Control", "private, no-store, must-revalidate");
-  res.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
-  return res;
+  let token: string;
+  try {
+    token = await signSession(userId, role);
+  } catch (signErr) {
+    const sm = signErr instanceof Error ? signErr.message : String(signErr);
+    console.error("[auth/register] signSession", signErr);
+    if (sm.includes("AUTH_SECRET") || sm.includes("32 characters")) {
+      return NextResponse.json(
+        { error: { code: "config", message: "На сервере не задан AUTH_SECRET (не менее 32 символов)." } },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json(
+      {
+        error: {
+          code: "session",
+          message: "Аккаунт создан, но сессия не установилась. Проверьте AUTH_SECRET на сервере и повторите вход.",
+        },
+      },
+      { status: 503 },
+    );
+  }
+  try {
+    const res = NextResponse.json(body);
+    res.headers.set("Cache-Control", "private, no-store, must-revalidate");
+    res.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions(req));
+    return res;
+  } catch (cookieErr) {
+    console.error("[auth/register] set-cookie", cookieErr);
+    return NextResponse.json(
+      { error: { code: "session", message: "Не удалось сохранить сессию в браузере. Попробуйте войти вручную." } },
+      { status: 503 },
+    );
+  }
 }
