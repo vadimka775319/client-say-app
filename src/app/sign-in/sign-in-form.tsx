@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SessionRole } from "@/lib/auth-session";
 import { demoAuth } from "@/lib/mock-data";
@@ -40,6 +40,16 @@ function hintForRole(role: SessionRole | null) {
   return null;
 }
 
+function validateLoginField(login: string): string | null {
+  const t = login.trim();
+  if (!t) return "Введите email или телефон.";
+  if (t.includes("@")) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? null : "Некорректный email.";
+  }
+  const digits = t.replace(/\D/g, "");
+  return digits.length >= 10 ? null : "Телефон: не меньше 10 цифр (или укажите email с символом @).";
+}
+
 export type SignInFormProps = {
   /** В модалке на главной: зафиксировать роль. Если не задано — из URL ?role= */
   embeddedRole?: SessionRole | null;
@@ -50,11 +60,55 @@ export type SignInFormProps = {
 export default function SignInForm(props: SignInFormProps = {}) {
   const { embeddedRole: embeddedRoleProp, hideChrome = false, onRequestClose } = props;
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
   const roleParam =
     embeddedRoleProp !== undefined ? embeddedRoleProp : parseSessionRole(searchParams.get("role"));
   const reason = searchParams.get("reason");
+
+  /** Баннер «другая учётка» только если в cookie реально есть сессия и она не подходит под открытый кабинет. */
+  const [wrongRoleActive, setWrongRoleActive] = useState(false);
+
+  useEffect(() => {
+    if (reason !== "wrong_role") {
+      setWrongRoleActive(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const r = await fetch("/api/auth/session", { credentials: "include", cache: "no-store" });
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; role?: string };
+      if (cancelled) return;
+
+      const stripReasonFromUrl = () => {
+        const p = new URLSearchParams(searchParams.toString());
+        p.delete("reason");
+        const qs = p.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname);
+      };
+
+      if (!j.ok) {
+        stripReasonFromUrl();
+        setWrongRoleActive(false);
+        return;
+      }
+      if (!roleParam) {
+        stripReasonFromUrl();
+        setWrongRoleActive(false);
+        return;
+      }
+      if (j.role === roleParam) {
+        stripReasonFromUrl();
+        setWrongRoleActive(false);
+        return;
+      }
+      setWrongRoleActive(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reason, roleParam, router, pathname, searchParams]);
 
   const isSuperCabinet = roleParam === "SUPER_ADMIN";
   const canRegister = roleParam === "PARTNER" || roleParam === "USER";
@@ -131,6 +185,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
       setError("Введите логин и пароль.");
       return;
     }
+    const loginErr = validateLoginField(id);
+    if (loginErr) {
+      setError(loginErr);
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -167,6 +226,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
     const pass = password.trim();
     if (!id || !pass || pass.length < 6) {
       setError("Минимум 6 символов в пароле и непустой логин.");
+      return;
+    }
+    const loginErr = validateLoginField(id);
+    if (loginErr) {
+      setError(loginErr);
       return;
     }
 
@@ -262,19 +326,22 @@ export default function SignInForm(props: SignInFormProps = {}) {
                 : "Сессия в защищённой cookie. После входа вы вернётесь в запрошенный раздел."}
           </p>
 
-          {reason === "wrong_role" && (
+          {wrongRoleActive ? (
             <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-amber-200/80 bg-amber-50/90 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
-              <span>Вы вошли под другой ролью. Выйдите и войдите нужной учёткой.</span>
+              <span>
+                В этом браузере уже выполнен вход в другой аккаунт. Нажмите «Выйти», затем войдите или зарегистрируйтесь
+                здесь.
+              </span>
               <button
                 type="button"
                 disabled={busy}
                 onClick={logoutHere}
                 className="shrink-0 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
               >
-                Выйти из сессии
+                Выйти
               </button>
             </div>
-          )}
+          ) : null}
 
           {canRegister && (
             <div className="mt-5 inline-flex rounded-full border border-slate-200/80 bg-slate-50/80 p-1 text-sm shadow-inner">
@@ -356,7 +423,9 @@ export default function SignInForm(props: SignInFormProps = {}) {
             <input
               className="input-cs"
               placeholder={
-                isSuperCabinet && mode === "login" ? "clientsay@mail.ru" : "Email или телефон"
+                isSuperCabinet && mode === "login"
+                  ? "clientsay@mail.ru"
+                  : "Email (с @) или телефон (от 10 цифр)"
               }
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}

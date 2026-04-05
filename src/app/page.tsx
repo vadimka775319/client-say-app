@@ -828,13 +828,13 @@ export default function Home() {
                     </a>
                   </li>
                   <li>
-                    <Link href="/partner" className="hover:text-slate-200">
-                      Кабинет партнёра
+                    <Link href="/sign-in?role=PARTNER&next=/partner" className="hover:text-slate-200">
+                      Вход / регистрация партнёра
                     </Link>
                   </li>
                   <li>
-                    <Link href="/user" className="hover:text-slate-200">
-                      Личный кабинет
+                    <Link href="/sign-in?role=USER&next=/user" className="hover:text-slate-200">
+                      Вход / регистрация пользователя
                     </Link>
                   </li>
                   <li>

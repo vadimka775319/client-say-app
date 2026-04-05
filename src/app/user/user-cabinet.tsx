@@ -34,6 +34,10 @@ export function UserCabinet() {
       ]);
       if (cancelled) return;
       if (!meRes.ok) {
+        if (meRes.status === 401 && typeof window !== "undefined") {
+          window.location.assign("/sign-in?role=USER&next=/user");
+          return;
+        }
         setLoadError("Не удалось загрузить профиль. Обновите страницу или войдите снова.");
         setReady(true);
         return;

@@ -53,6 +53,30 @@ export async function POST(req: Request) {
   }
 
   const data = parsed.data;
+  const loginTrim = data.login.trim();
+  if (loginTrim.includes("@")) {
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginTrim);
+    if (!emailOk) {
+      return NextResponse.json(
+        { error: { code: "validation", message: "Некорректный email" } },
+        { status: 400 },
+      );
+    }
+  } else {
+    const digits = loginTrim.replace(/\D/g, "");
+    if (digits.length < 10) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "validation",
+            message: "Укажите email (с символом @) или номер телефона (не меньше 10 цифр).",
+          },
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   const passwordHash = await hashPassword(data.password);
 
   try {
@@ -125,10 +149,11 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
-    return NextResponse.json(
-      { error: { code: "internal", message: "Ошибка регистрации. Попробуйте снова." } },
-      { status: 500 },
-    );
+    const msg =
+      e instanceof Error && process.env.NODE_ENV === "development"
+        ? `Ошибка сервера: ${e.message}`
+        : "Ошибка регистрации. Попробуйте снова или укажите другой email/телефон.";
+    return NextResponse.json({ error: { code: "internal", message: msg } }, { status: 500 });
   }
 }
 

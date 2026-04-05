@@ -137,6 +137,10 @@ export function PartnerWorkspace() {
     try {
       const br = await fetch("/api/partner/briefs", { cache: "no-store" });
       if (!br.ok) {
+        if (br.status === 403 && typeof window !== "undefined") {
+          window.location.assign("/sign-in?role=PARTNER&next=/partner");
+          return;
+        }
         if (br.status === 403) setCabinetError("Нет доступа.");
         return;
       }
@@ -157,6 +161,10 @@ export function PartnerWorkspace() {
       if (cancelled) return;
       try {
         const rr = await fetch("/api/partner/rewards", { cache: "no-store" });
+        if (rr.status === 403 && typeof window !== "undefined") {
+          window.location.assign("/sign-in?role=PARTNER&next=/partner");
+          return;
+        }
         if (rr.ok && !cancelled) {
           const j = (await rr.json()) as { rewards?: PartnerCabinetReward[] };
           setPartnerRewards(Array.isArray(j.rewards) ? j.rewards : []);
