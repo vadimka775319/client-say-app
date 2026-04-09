@@ -63,6 +63,7 @@ export function AdminDashboard() {
         if (!d || cancelled) return;
         setSiteSettings((s) => ({
           ...s,
+          logoUrl: d.logoUrl ?? "",
           brandLine: d.brandLine,
           emailInfo: d.emailInfo,
           phoneDisplay: d.phoneDisplay,
@@ -301,6 +302,7 @@ function SiteSettingsPanel({
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          logoUrl: value.logoUrl,
           brandLine: value.brandLine,
           emailInfo: value.emailInfo,
           phoneDisplay: value.phoneDisplay,
@@ -333,6 +335,55 @@ function SiteSettingsPanel({
         <strong>Счётчики</strong> на лендинге — демо: база + данные из этой админки, сохраняются в браузере.
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="block text-sm md:col-span-2">
+          Логотип сайта (PNG/JPG/SVG, до 1.5 МБ)
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              if (file.size > 1_500_000) {
+                setPublicMsg("Файл слишком большой. Выберите логотип до 1.5 МБ.");
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = typeof reader.result === "string" ? reader.result : "";
+                if (!result.startsWith("data:image/")) {
+                  setPublicMsg("Не удалось прочитать файл как изображение.");
+                  return;
+                }
+                onChange({ ...value, logoUrl: result });
+                setPublicMsg("Логотип загружен в форму. Нажмите «Сохранить контакты на сайт».");
+              };
+              reader.onerror = () => setPublicMsg("Не удалось прочитать файл.");
+              reader.readAsDataURL(file);
+            }}
+          />
+          <span className="mt-1 block text-xs text-slate-500">
+            Файл хранится в базе как Data URL. После загрузки обязательно нажмите «Сохранить контакты на сайт».
+          </span>
+        </label>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 md:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Предпросмотр логотипа</p>
+          {value.logoUrl ? (
+            <div className="mt-2 flex items-center justify-between gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={value.logoUrl} alt="Логотип сайта" className="h-12 w-auto max-w-[220px] rounded bg-slate-50 p-1" />
+              <button
+                type="button"
+                className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700"
+                onClick={() => onChange({ ...value, logoUrl: "" })}
+              >
+                Удалить логотип
+              </button>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500">Логотип пока не загружен.</p>
+          )}
+        </div>
         <label className="block text-sm">
           Короткое описание сервиса
           <input

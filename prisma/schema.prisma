@@ -132,6 +132,7 @@ model Redemption {
 /// Публичные контакты и слоган для лендинга (редактирует супер-админ). Одна строка id = "default".
 model SitePublicConfig {
   id           String   @id @default("default")
+  logoUrl      String   @default("")
   brandLine    String   @default("Сервис обратной связи с использованием QR-кодов")
   emailInfo    String   @default("clientsay@mail.ru")
   phoneDisplay String   @default("")

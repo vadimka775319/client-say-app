@@ -124,6 +124,7 @@ export default function Home() {
         if (!d || cancelled) return;
         setSiteSettings((s) => ({
           ...s,
+          logoUrl: d.logoUrl ?? "",
           brandLine: d.brandLine,
           emailInfo: d.emailInfo,
           phoneDisplay: d.phoneDisplay,
@@ -186,9 +187,17 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-sky-100/80 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3 md:px-8">
           <Link href="/" className="flex shrink-0 items-center gap-2 no-underline">
-            <span className="font-brand-logo bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-2xl tracking-tight text-transparent md:text-3xl">
-              {BRAND_NAME}
-            </span>
+            {siteSettings.logoUrl ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={siteSettings.logoUrl} alt={`${BRAND_NAME} logo`} className="h-8 w-auto max-w-[120px] md:h-9 md:max-w-[140px]" />
+                <span className="font-brand-logo text-lg tracking-tight text-slate-900 md:text-xl">{BRAND_NAME}</span>
+              </>
+            ) : (
+              <span className="font-brand-logo bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-2xl tracking-tight text-transparent md:text-3xl">
+                {BRAND_NAME}
+              </span>
+            )}
           </Link>
           <button
             type="button"
@@ -761,6 +770,12 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-5 py-12 md:px-8">
             <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4 lg:gap-8">
               <div className="lg:col-span-1">
+                {siteSettings.logoUrl ? (
+                  <div className="mb-4">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={siteSettings.logoUrl} alt={`${BRAND_NAME} logo`} className="h-10 w-auto max-w-[180px]" />
+                  </div>
+                ) : null}
                 <p className="text-xs font-bold uppercase tracking-widest text-violet-400/90">Связь с нами</p>
                 <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-300">{siteSettings.brandLine}</p>
                 <div className="mt-6 rounded-2xl border border-slate-800/80 bg-slate-900/50 p-5">

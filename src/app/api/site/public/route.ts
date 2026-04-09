@@ -12,6 +12,7 @@ const noStore = {
 } as const;
 
 const patchSchema = z.object({
+  logoUrl: z.string().max(2_000_000),
   brandLine: z.string().min(1).max(500),
   emailInfo: z.string().min(1).max(320),
   phoneDisplay: z.string().max(120),

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { defaultSiteSettings } from "@/lib/site-settings";
 
 export type SitePublicFields = {
+  logoUrl: string;
   brandLine: string;
   emailInfo: string;
   phoneDisplay: string;
@@ -10,6 +11,7 @@ export type SitePublicFields = {
 };
 
 const defaults: SitePublicFields = {
+  logoUrl: defaultSiteSettings.logoUrl,
   brandLine: defaultSiteSettings.brandLine,
   emailInfo: defaultSiteSettings.emailInfo,
   phoneDisplay: defaultSiteSettings.phoneDisplay,
@@ -19,6 +21,7 @@ const defaults: SitePublicFields = {
 
 export function rowToPublic(row: SitePublicFields): SitePublicFields {
   return {
+    logoUrl: row.logoUrl,
     brandLine: row.brandLine,
     emailInfo: row.emailInfo,
     phoneDisplay: row.phoneDisplay,

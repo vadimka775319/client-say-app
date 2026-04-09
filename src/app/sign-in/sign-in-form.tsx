@@ -176,6 +176,31 @@ export default function SignInForm(props: SignInFormProps = {}) {
     };
   }, [pathname, router, searchParams]);
 
+  /** При открытии конкретной роли сбрасываем старую сессию другой роли, чтобы не было входа "в чужой кабинет". */
+  useEffect(() => {
+    if (!roleParam) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch("/api/auth/session", { cache: "no-store", credentials: "include" });
+        const d = (await r.json()) as { ok?: boolean; role?: SessionRole };
+        if (cancelled || !d?.ok || !d.role) return;
+        if (d.role !== roleParam) {
+          await fetch("/api/auth/logout", { method: "POST", credentials: "include", cache: "no-store" });
+          if (cancelled) return;
+          setNotice(`Сессия роли ${ROLE_LABEL[d.role]} завершена. Теперь войдите как ${ROLE_LABEL[roleParam]}.`);
+        } else {
+          setNotice("");
+        }
+      } catch {
+        // ignore network errors here
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roleParam]);
+
   const isSuperCabinet = roleParam === "SUPER_ADMIN";
   const canRegister = roleParam === "PARTNER" || roleParam === "USER";
   /** У админа только вход; у остальных — переключатель вход/регистрация. */
@@ -197,6 +222,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
   const [partnerCityCustom, setPartnerCityCustom] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [lastDiag, setLastDiag] = useState<string | null>(null);
   const [regFieldErr, setRegFieldErr] = useState<Partial<Record<RegFieldKey, string>>>({});
   const [origin, setOrigin] = useState("");
@@ -206,6 +232,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
     const p = new URLSearchParams(searchParams.toString());
     p.set("role", nextRole);
     p.delete("reason");
+    setNotice("");
     setLastDiag(null);
     router.replace(`${pathname}?${p.toString()}`);
   }
@@ -214,6 +241,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
     setModalCabinet(nextRole);
     setRegFieldErr({});
     setError("");
+    setNotice("");
     setLastDiag(null);
   }
 
@@ -512,6 +540,11 @@ export default function SignInForm(props: SignInFormProps = {}) {
                 ? "Выберите кабинет ниже: пользователь или партнёр. В адрес добавится ?role=… Для регистрации выбор обязателен; для входа можно отправить форму и без выбора — откроется кабинет по учётке."
                 : "Сессия в защищённой cookie. После входа вы вернётесь в запрошенный раздел."}
           </p>
+          {notice ? (
+            <p className="mt-4 rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-sm text-amber-950">
+              {notice}
+            </p>
+          ) : null}
 
           {showCabinetChoiceCards ? (
             <div className="mt-6 space-y-3">

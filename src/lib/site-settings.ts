@@ -1,4 +1,5 @@
 export type SiteSettings = {
+  logoUrl: string;
   phoneDisplay: string;
   phoneTel: string;
   schedule: string;
@@ -12,6 +13,7 @@ export type SiteSettings = {
 export const SITE_SETTINGS_KEY = "clientsay.site.settings.v1";
 
 export const defaultSiteSettings: SiteSettings = {
+  logoUrl: "",
   phoneDisplay: "",
   phoneTel: "",
   schedule: "Ответим на e-mail в рабочие дни (МСК)",
