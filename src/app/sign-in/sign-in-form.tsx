@@ -467,7 +467,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
     setBusy(true);
     try {
       if (roleParam === "USER") {
-        const res = await fetch(`${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/register`, {
+        const res = await fetch("/api/auth/register", {
           method: "POST",
           credentials: "include",
           cache: "no-store",
@@ -507,7 +507,7 @@ export default function SignInForm(props: SignInFormProps = {}) {
 
       const resolvedCity =
         partnerCity === PARTNER_CITY_OTHER ? partnerCityCustom.trim() : partnerCity.trim();
-      const res = await fetch(`${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/register`, {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
@@ -543,9 +543,10 @@ export default function SignInForm(props: SignInFormProps = {}) {
       }
       if (typed.role === "PARTNER") clearLegacyPartnerBrowserState();
       redirectAfterAuth(typed.role);
-    } catch {
-      setLastDiag("Сеть: исключение fetch");
-      setError("Сеть недоступна. Попробуйте снова.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setLastDiag(`Сеть: исключение fetch (${msg})`);
+      setError(`Ошибка регистрации. Проверьте сеть/прокси (${msg || "unknown"}).`);
     } finally {
       setBusy(false);
     }
