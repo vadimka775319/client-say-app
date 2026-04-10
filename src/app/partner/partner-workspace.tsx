@@ -135,7 +135,7 @@ export function PartnerWorkspace() {
   const reloadCabinet = useCallback(async () => {
     setCabinetError(null);
     try {
-      const br = await fetch("/api/partner/briefs", { cache: "no-store" });
+      const br = await fetch("/api/partner/briefs", { cache: "no-store", credentials: "include" });
       if (!br.ok) {
         if (br.status === 403 && typeof window !== "undefined") {
           window.location.assign("/sign-in?role=PARTNER&next=/partner");
@@ -160,7 +160,7 @@ export function PartnerWorkspace() {
       await reloadCabinet();
       if (cancelled) return;
       try {
-        const rr = await fetch("/api/partner/rewards", { cache: "no-store" });
+        const rr = await fetch("/api/partner/rewards", { cache: "no-store", credentials: "include" });
         if (rr.status === 403 && typeof window !== "undefined") {
           window.location.assign("/sign-in?role=PARTNER&next=/partner");
           return;
@@ -182,7 +182,7 @@ export function PartnerWorkspace() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const r = await fetch("/api/me", { cache: "no-store" });
+      const r = await fetch("/api/me", { cache: "no-store", credentials: "include" });
       if (!r.ok || cancelled || companyHydratedFromApi.current) return;
       const d = (await r.json()) as {
         partner?: { companyName: string; city: string; addressLine: string; locations: number } | null;
@@ -283,6 +283,7 @@ export function PartnerWorkspace() {
       const url = editingBriefId ? `/api/partner/briefs/${editingBriefId}` : "/api/partner/briefs";
       const r = await fetch(url, {
         method: editingBriefId ? "PATCH" : "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -357,6 +358,7 @@ export function PartnerWorkspace() {
       const url = editingPrizeId ? `/api/partner/rewards/${editingPrizeId}` : "/api/partner/rewards";
       const r = await fetch(url, {
         method: editingPrizeId ? "PATCH" : "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -367,7 +369,7 @@ export function PartnerWorkspace() {
       }
       setMessage(editingPrizeId ? "Приз обновлён в базе." : "Приз добавлен — виден пользователям в кабинете.");
       resetPrizeForm();
-      const rr = await fetch("/api/partner/rewards", { cache: "no-store" });
+      const rr = await fetch("/api/partner/rewards", { cache: "no-store", credentials: "include" });
       if (rr.ok) {
         const jr = (await rr.json()) as { rewards?: PartnerCabinetReward[] };
         setPartnerRewards(Array.isArray(jr.rewards) ? jr.rewards : []);
@@ -390,7 +392,7 @@ export function PartnerWorkspace() {
   async function removePartnerPrize(id: string) {
     if (!confirm("Удалить приз из витрины?")) return;
     try {
-      const r = await fetch(`/api/partner/rewards/${id}`, { method: "DELETE" });
+      const r = await fetch(`/api/partner/rewards/${id}`, { method: "DELETE", credentials: "include" });
       if (!r.ok) {
         setMessage("Не удалось удалить приз.");
         return;
@@ -410,6 +412,7 @@ export function PartnerWorkspace() {
     try {
       const r = await fetch("/api/partner/profile", {
         method: "PATCH",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           companyName: companyName.trim(),

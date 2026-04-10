@@ -25,7 +25,14 @@ export async function getSession(): Promise<SessionUser | null> {
   const payload = await verifySession(token);
   if (!payload) return null;
   const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (!user || user.role !== payload.role) return null;
+  if (!user) return null;
+  let dbRole: SessionRole;
+  try {
+    dbRole = prismaRoleToSessionRole(user.role);
+  } catch {
+    return null;
+  }
+  if (dbRole !== payload.role) return null;
   return {
     id: user.id,
     role: user.role,

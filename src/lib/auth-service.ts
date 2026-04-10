@@ -248,15 +248,33 @@ export async function performLogin(
       return fail(401, "credentials", "Неверный логин или пароль.");
     }
 
-    if (expectedRole != null && user.role !== expectedRole) {
-      return fail(403, "wrong_role", "Этот аккаунт не подходит для выбранного кабинета.");
-    }
-
     let role: SessionRole;
     try {
       role = prismaRoleToSessionRole(user.role);
     } catch {
       return fail(500, "account", "Учётная запись повреждена. Обратитесь в поддержку.");
+    }
+
+    if (expectedRole != null && role !== expectedRole) {
+      return fail(403, "wrong_role", "Этот аккаунт не подходит для выбранного кабинета.");
+    }
+
+    if (role === "PARTNER") {
+      try {
+        const existing = await prisma.partner.findUnique({ where: { userId: user.id }, select: { id: true } });
+        if (!existing) {
+          await prisma.partner.create({
+            data: {
+              userId: user.id,
+              companyName: "Компания",
+              city: "",
+              locations: 0,
+            },
+          });
+        }
+      } catch (e) {
+        console.error("[auth-service] performLogin partner row", e);
+      }
     }
 
     return { ok: true, userId: user.id, role };
