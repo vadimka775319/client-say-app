@@ -384,10 +384,12 @@ export default function SignInForm(props: SignInFormProps = {}) {
         setError(data?.error?.message ?? "Не удалось войти.");
         return;
       }
-      if (data?.role) {
-        if (data.role === "PARTNER") clearLegacyPartnerBrowserState();
-        redirectAfterAuth(data.role);
+      if (!data?.role) {
+        setError("Ответ сервера неполный. Попробуйте обновить страницу или откройте /api/health.");
+        return;
       }
+      if (data.role === "PARTNER") clearLegacyPartnerBrowserState();
+      redirectAfterAuth(data.role);
     } catch {
       setError("Сеть недоступна. Попробуйте снова.");
     } finally {
