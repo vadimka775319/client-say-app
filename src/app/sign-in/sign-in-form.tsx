@@ -261,6 +261,20 @@ export default function SignInForm(props: SignInFormProps = {}) {
       .catch(() => setApiBuildLabel(null));
   }, []);
 
+  // Self-heal stale CDN/browser HTML: if page HTML and API versions diverge,
+  // force one cache-busted reload once per tab.
+  useEffect(() => {
+    if (!serverBuildLabel || !apiBuildLabel) return;
+    if (serverBuildLabel === apiBuildLabel) return;
+    if (typeof window === "undefined") return;
+    const KEY = "clientsay_signin_cache_bust_once";
+    if (window.sessionStorage.getItem(KEY) === apiBuildLabel) return;
+    window.sessionStorage.setItem(KEY, apiBuildLabel);
+    const u = new URL(window.location.href);
+    u.searchParams.set("_v", apiBuildLabel);
+    window.location.replace(u.toString());
+  }, [apiBuildLabel, serverBuildLabel]);
+
   const title = useMemo(() => {
     if (isSuperCabinet) return "Кабинет супер-админа";
     if (mode === "register") {
