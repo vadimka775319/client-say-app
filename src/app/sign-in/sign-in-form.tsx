@@ -353,6 +353,20 @@ export default function SignInForm(props: SignInFormProps = {}) {
     }
   }
 
+  async function verifySessionAfterAuth(expectedRole: SessionRole): Promise<boolean> {
+    try {
+      const r = await fetch(`/api/auth/session?bust=${Date.now()}`, {
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!r.ok) return false;
+      const d = (await r.json()) as { ok?: boolean; role?: SessionRole };
+      return d?.ok === true && d.role === expectedRole;
+    } catch {
+      return false;
+    }
+  }
+
   async function onLogin() {
     setError("");
     const id = identifier.trim();
@@ -386,6 +400,13 @@ export default function SignInForm(props: SignInFormProps = {}) {
       }
       if (!data?.role) {
         setError("Ответ сервера неполный. Попробуйте обновить страницу или откройте /api/health.");
+        return;
+      }
+      const sessionOk = await verifySessionAfterAuth(data.role);
+      if (!sessionOk) {
+        setError(
+          "Сессия не сохранилась после входа. Очистите cookie/кэш сайта и попробуйте снова. Если не поможет — проверьте HTTPS и прокси.",
+        );
         return;
       }
       if (data.role === "PARTNER") clearLegacyPartnerBrowserState();
@@ -472,6 +493,13 @@ export default function SignInForm(props: SignInFormProps = {}) {
           setError("Ответ сервера неполный. Попробуйте войти с тем же email или телефоном.");
           return;
         }
+        const sessionOk = await verifySessionAfterAuth(typed.role);
+        if (!sessionOk) {
+          setError(
+            "Регистрация выполнена, но сессия не сохранилась. Очистите cookie/кэш сайта и повторите вход.",
+          );
+          return;
+        }
         if (typed.role === "PARTNER") clearLegacyPartnerBrowserState();
         redirectAfterAuth(typed.role);
         return;
@@ -504,6 +532,13 @@ export default function SignInForm(props: SignInFormProps = {}) {
       }
       if (!typed?.role) {
         setError("Ответ сервера неполный. Попробуйте войти с тем же email или телефоном.");
+        return;
+      }
+      const sessionOk = await verifySessionAfterAuth(typed.role);
+      if (!sessionOk) {
+        setError(
+          "Регистрация выполнена, но сессия не сохранилась. Очистите cookie/кэш сайта и повторите вход.",
+        );
         return;
       }
       if (typed.role === "PARTNER") clearLegacyPartnerBrowserState();
