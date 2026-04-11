@@ -54,3 +54,9 @@ scripts/                 # Сборка, деплой-обвязка, VPS PowerS
 ## Пароль PostgreSQL и том Docker
 
 Пароль задаётся при **первой** инициализации тома. Смена `POSTGRES_PASSWORD` в `docker-compose.yml` не меняет уже созданный том. При рассинхроне с `DATABASE_URL`: `ALTER USER postgres WITH PASSWORD '…'` под пользователем с доступом в контейнер.
+
+При каждом деплое через GitHub Actions после `docker compose up -d db` выполняется **`ALTER USER postgres WITH PASSWORD 'postgres'`**, чтобы совпасть с `POSTGRES_PASSWORD` из `docker-compose.yml` и с типовым `DATABASE_URL` в `.env`.
+
+### Как понять, какая версия API на проде
+
+Ответ **`GET /api/health`** в актуальной сборке при ошибке БД содержит поля **`hintEn`**, **`errorCode`**, **`deploy`**. Если их нет — отдаётся **старая** версия приложения (не тот процесс PM2, не тот порт в nginx или деплой не дошёл).

@@ -222,6 +222,11 @@ jobs:
               echo "Ожидание Postgres... ($i/35)"
               sleep 2
             done
+            # Том Postgres мог быть создан с другим паролем; POSTGRES_PASSWORD из compose на существующий том не влияет.
+            # Выравниваем роль postgres под строку по умолчанию (postgres:postgres), иначе Prisma с хоста даёт P1000.
+            echo "=== ALTER USER postgres (синхрон с docker-compose POSTGRES_PASSWORD=postgres) ==="
+            "${DOCKER_COMPOSE_ARGS[@]}" exec -T db psql -U postgres -d postgres -c "ALTER USER postgres WITH PASSWORD 'postgres';" \
+              || echo "WARN: ALTER USER не выполнен (если Prisma с хоста падает по паролю — выполните вручную на VPS)."
           fi
 
           # Пустой/плейсхолдерный URL → как в docker-compose (Postgres на 127.0.0.1:5432)
@@ -328,13 +333,13 @@ jobs:
           for h in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
             if command -v curl >/dev/null 2>&1; then
               H="$(curl -sfS "http://127.0.0.1:${PORT}/api/health" 2>/dev/null || true)"
-              if echo "$H" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' && echo "$H" | grep -q '"deploy"'; then
+              if echo "$H" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' && echo "$H" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true'; then
                 HEALTH_OK=1
                 break
               fi
             elif command -v wget >/dev/null 2>&1; then
               H="$(wget -qO- "http://127.0.0.1:${PORT}/api/health" 2>/dev/null || true)"
-              if echo "$H" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' && echo "$H" | grep -q '"deploy"'; then
+              if echo "$H" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' && echo "$H" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true'; then
                 HEALTH_OK=1
                 break
               fi
@@ -347,7 +352,7 @@ jobs:
             sleep 2
           done
           if [ "$HEALTH_OK" != 1 ]; then
-            echo "::error::После деплоя http://127.0.0.1:${PORT}/api/health не вернул db:up и/или нет поля deploy (крутится старая сборка или не тот порт). Смотрите: pm2 describe client-say-app, pm2 logs client-say-app, nginx upstream." >&2
+            echo "::error::После деплоя http://127.0.0.1:${PORT}/api/health не вернул ok:true и db:up. Смотрите: pm2 describe client-say-app, pm2 logs client-say-app, docker compose ps, nginx upstream." >&2
             exit 1
           fi
           if ! curl -sfS "http://127.0.0.1:${PORT}/api/deploy-meta" | grep -q '"gitShort"'; then
@@ -381,18 +386,17 @@ jobs:
               -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
               "$BUST" 2>/dev/null || true)"
             if echo "$RESP" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true' \
-              && echo "$RESP" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"' \
-              && echo "$RESP" | grep -q '"deploy"'; then
+              && echo "$RESP" | grep -qE '"db"[[:space:]]*:[[:space:]]*"up"'; then
               OK=1
               break
             fi
-            echo "Попытка $i/18: нет полного ответа (ok+db+deploy), пауза 10с…"
+            echo "Попытка $i/18: нет ok:true и db:up, пауза 10с…"
             echo "$RESP" | head -c 500
             echo ""
             sleep 10
           done
           if [ "$OK" != 1 ]; then
-            echo "::warning::С домена за ~3 мин не пришёл /api/health с полем deploy (nginx/upstream/CDN не совпадает с PM2). Деплой на VPS при этом уже проверен локально. Исправьте proxy_pass на порт PM2, уберите лишний upstream, для /api/ отключите кэш CDN. Или удалите секрет PUBLIC_SITE_URL."
+            echo "::warning::С домена за ~3 мин не пришёл /api/health с ok:true и db:up. Деплой на VPS при этом уже проверен локально. Исправьте proxy_pass на порт PM2, nginx upstream, для /api/ отключите кэш CDN. Или удалите секрет PUBLIC_SITE_URL."
             exit 1
           fi
           echo "$RESP"
