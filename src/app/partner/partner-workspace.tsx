@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
+import { publicBriefUrl } from "@/lib/brief-public-url";
 import { computeBriefPoints, type BriefQuestionType } from "@/lib/mock-data";
 
 type DraftQuestion = { id: string; type: BriefQuestionType; prompt: string; options: string };
@@ -40,11 +40,6 @@ type PartnerCabinetReward = {
   endsAt: string;
 };
 
-function publicBriefUrl(id: string): string {
-  if (typeof window === "undefined") return `https://clientsay.ru/brief/${id}`;
-  return `${window.location.origin}/brief/${id}`;
-}
-
 function apiRowToBriefItem(b: ApiBriefRow): BriefItem {
   return {
     id: b.id,
@@ -63,7 +58,8 @@ function apiRowToBriefItem(b: ApiBriefRow): BriefItem {
 }
 
 async function makeQrDataUrl(url: string): Promise<string> {
-  return QRCode.toDataURL(url, { width: 240, margin: 2, errorCorrectionLevel: "M" });
+  const QRCode = (await import("qrcode")).default;
+  return QRCode.toDataURL(url, { width: 280, margin: 2, errorCorrectionLevel: "M" });
 }
 
 function downloadDataUrl(dataUrl: string, filename: string) {
@@ -74,6 +70,47 @@ function downloadDataUrl(dataUrl: string, filename: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+function downloadBriefLinkTxt(url: string, title: string) {
+  const blob = new Blob([`${title}\n\nСсылка на бриф:\n${url}\n`], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `brief-link-${Date.now()}.txt`;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(a.href);
+  a.remove();
+}
+
+function escHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function printBriefQrPage(title: string, briefUrl: string, qrDataUrl: string | undefined) {
+  const w = window.open("", "_blank", "noopener,noreferrer,width=720,height=860");
+  if (!w) return false;
+  const img = qrDataUrl
+    ? `<img src="${qrDataUrl}" alt="QR" style="width:280px;height:280px;border:1px solid #e2e8f0;padding:8px;background:#fff" />`
+    : "<p>QR не сгенерирован — вернитесь в кабинет и нажмите «Сгенерировать QR».</p>";
+  const t = escHtml(title);
+  const u = escHtml(briefUrl);
+  w.document.write(`<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><title>${t}</title></head>
+  <body style="font-family:system-ui,sans-serif;padding:24px;max-width:520px;margin:0 auto">
+  <h1 style="font-size:18px">${t}</h1>
+  <p style="word-break:break-all;font-size:13px"><strong>Ссылка:</strong><br/>${u}</p>
+  <div style="margin:20px 0">${img}</div>
+  <p style="font-size:12px;color:#64748b">Распечатайте этот лист (Ctrl+P) и разместите QR в точке.</p>
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  queueMicrotask(() => w.print());
+  return true;
 }
 
 function speakUrlAloud(url: string, onUnsupported: () => void) {
@@ -435,7 +472,7 @@ export function PartnerWorkspace() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-8 md:px-8">
+    <div className="flex w-full flex-col gap-6 md:gap-8">
       {cabinetError ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{cabinetError}</div>
       ) : null}
@@ -443,7 +480,7 @@ export function PartnerWorkspace() {
         <p className="text-sm text-slate-500">Загрузка данных из базы…</p>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="cabinet-surface">
         <p className="text-xs uppercase tracking-widest text-slate-500">Кабинет партнера</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">{companyName || "Новая компания"}</h1>
         {companyCity.trim() || companyAddress.trim() ? (
@@ -893,6 +930,23 @@ export function PartnerWorkspace() {
                           </button>
                           <button
                             type="button"
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold"
+                            onClick={() => downloadBriefLinkTxt(b.qrCode, b.title)}
+                          >
+                            Скачать ссылку (.txt)
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900"
+                            onClick={() => {
+                              const ok = printBriefQrPage(b.title, b.qrCode, b.qrDataUrl);
+                              if (!ok) setMessage("Разрешите всплывающие окна для печати.");
+                            }}
+                          >
+                            Печать (QR + ссылка)
+                          </button>
+                          <button
+                            type="button"
                             className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900"
                             onClick={() =>
                               speakUrlAloud(b.qrCode, () =>
@@ -919,6 +973,6 @@ export function PartnerWorkspace() {
           )}
         </div>
       </section>
-    </main>
+    </div>
   );
 }

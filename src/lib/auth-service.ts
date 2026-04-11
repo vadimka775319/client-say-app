@@ -144,7 +144,11 @@ function mapDbError(e: unknown, context: "register" | "login"): AuthFailure {
       return fail(409, "duplicate", duplicateMessage(e));
     }
     if (e.code === "P2021" || e.code === "P2022") {
-      return fail(503, "db_schema_outdated", "База не совпадает со схемой. На сервере выполните: npx prisma db push");
+      return fail(
+        503,
+        "db_schema_outdated",
+        "В базе нет нужных таблиц или колонок (схема не применена). На сервере в каталоге приложения выполните: npx prisma db push. С ПК: npm run vps:db. Затем обновите страницу.",
+      );
     }
   }
 

@@ -110,6 +110,19 @@ export function AdminDashboard() {
 
   return (
     <>
+      <SiteSettingsPanel
+        value={siteSettings}
+        onChange={setSiteSettings}
+        stats={{
+          realPartners: partnerList.length,
+          realUsers: userList.length,
+          realRewards: rewardList.length,
+          totalPartners: landingStats.partners,
+          totalUsers: landingStats.users,
+          totalRewards: landingStats.rewards,
+        }}
+      />
+
       <section className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm">
         <p className="font-semibold text-amber-900">Как устроен супер-админ в коде</p>
         <p className="mt-2 leading-relaxed">
@@ -147,19 +160,6 @@ export function AdminDashboard() {
           </li>
         </ul>
       </section>
-
-      <SiteSettingsPanel
-        value={siteSettings}
-        onChange={setSiteSettings}
-        stats={{
-          realPartners: partnerList.length,
-          realUsers: userList.length,
-          realRewards: rewardList.length,
-          totalPartners: landingStats.partners,
-          totalUsers: landingStats.users,
-          totalRewards: landingStats.rewards,
-        }}
-      />
 
       <AdminRewardsPanel
         rewards={rewardList}
@@ -328,7 +328,7 @@ function SiteSettingsPanel({
   }
 
   return (
-    <section className="rounded-2xl border border-sky-200 bg-sky-50/60 p-6 shadow-sm">
+    <section className="cabinet-surface border-violet-200/80 bg-gradient-to-br from-white via-sky-50/40 to-violet-50/30 p-6 md:p-8">
       <h2 className="text-lg font-bold text-slate-900">Настройки сайта: счётчики и контакты в футере</h2>
       <p className="mt-1 text-sm text-slate-600">
         <strong>Контакты и слоган</strong> хранятся в базе: после правки нажмите «Сохранить на сайт».{" "}

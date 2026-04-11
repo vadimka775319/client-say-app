@@ -12,7 +12,7 @@ export default function AdminPage() {
       title="Супер-админ"
       subtitle="Витрина призов, метрики и разбор отзывов"
     >
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-8 md:px-8">
+      <main className="cabinet-page px-5 py-8 md:px-8">
         {showDemoHint ? (
           <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
             <strong>Демо-доступ (только dev):</strong> {superAdminDemoAuth.login} / {superAdminDemoAuth.password}

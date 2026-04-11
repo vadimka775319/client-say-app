@@ -159,7 +159,7 @@ export function UserCabinet() {
 
   if (!ready) {
     return (
-      <section className="card text-center text-sm text-slate-600">
+      <section className="cabinet-surface text-center text-sm text-slate-600">
         Загрузка кабинета…
       </section>
     );
@@ -187,7 +187,7 @@ export function UserCabinet() {
       <HowToBriefWithQr userCity={city} />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <section className="card lg:col-span-2">
+        <section className="cabinet-surface lg:col-span-2">
           <h2 className="h2">Профиль</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
@@ -291,7 +291,7 @@ export function UserCabinet() {
 
       <PartnerDirectoryForUser regionCity={city} />
 
-      <section className="card">
+      <section className="cabinet-surface">
         <h2 className="h2">Призы за баллы</h2>
         <p className="mb-4 text-sm text-slate-600">
           Все призы из базы: акции платформы и акции партнёров. Обмен списывает баллы и выдаёт одноразовый код.

@@ -10,14 +10,18 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "verify:release": "npm run lint && npm run typecheck && node scripts/verify-release.cjs",
     "db:generate": "prisma generate",
     "db:docker": "docker compose up -d",
     "db:docker:down": "docker compose down",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:sync": "prisma db push && prisma db seed",
-    "git:save": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-github.ps1",
-    "git:push": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-github.ps1 -Push"
+    "prod:health": "node scripts/run-ps1.cjs prod-health-check.ps1",
+    "vps:db": "node scripts/run-ps1.cjs vps-fix-db-stack.ps1",
+    "vps:diag": "node scripts/run-ps1.cjs vps-diagnose.ps1",
+    "git:save": "node scripts/run-ps1.cjs sync-github.ps1",
+    "git:push": "node scripts/run-ps1.cjs sync-github.ps1 -Push"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"

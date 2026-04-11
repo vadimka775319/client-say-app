@@ -1,12 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f3f7fd;
+  --background: #f1f5f9;
   --foreground: #0f172a;
+  --cs-surface: #ffffff;
+  --cs-surface-muted: #f8fafc;
+  --cs-border: #e2e8f0;
+  --cs-border-strong: #cbd5e1;
   --cs-sky: #e8f4ff;
   --cs-lilac: #f1edff;
   --cs-accent: #5b6cf6;
   --cs-accent-2: #7c3aed;
+  --cs-radius: 1rem;
+  --cs-radius-lg: 1.25rem;
+  --cs-shadow: 0 1px 3px rgb(15 23 42 / 6%), 0 4px 14px rgb(15 23 42 / 4%);
   /* Без Google Fonts — сборка на VPS без доступа к fonts.googleapis.com */
   --font-app-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans",
     sans-serif;
@@ -33,12 +40,73 @@ body {
   letter-spacing: -0.04em;
 }
 
+/* Кабинеты: единая «плитка» без смены копирайта в компонентах */
+.cabinet-page {
+  display: flex;
+  width: 100%;
+  max-width: 72rem;
+  margin-left: auto;
+  margin-right: auto;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+@media (min-width: 768px) {
+  .cabinet-page {
+    gap: 2rem;
+  }
+}
+
+.cabinet-surface {
+  border-radius: var(--cs-radius-lg);
+  border: 1px solid var(--cs-border);
+  background: var(--cs-surface);
+  padding: 1.25rem 1.35rem;
+  box-shadow: var(--cs-shadow);
+}
+
+@media (min-width: 768px) {
+  .cabinet-surface {
+    padding: 1.5rem 1.65rem;
+  }
+}
+
+.btn-cabinet-primary {
+  border-radius: 0.75rem;
+  background: #0f172a;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.btn-cabinet-primary:hover {
+  background: #1e293b;
+}
+.btn-cabinet-primary:disabled {
+  opacity: 0.55;
+}
+
+.btn-cabinet-secondary {
+  border-radius: 999px;
+  border: 1px solid var(--cs-border-strong);
+  background: var(--cs-surface);
+  padding: 0.45rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.btn-cabinet-secondary:hover {
+  background: var(--cs-surface-muted);
+}
+
 .card {
-  border-radius: 1rem;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
+  border-radius: var(--cs-radius);
+  border: 1px solid var(--cs-border);
+  background: var(--cs-surface);
   padding: 1.1rem;
-  box-shadow: 0 2px 10px rgb(15 23 42 / 5%);
+  box-shadow: var(--cs-shadow);
 }
 
 .h2 {

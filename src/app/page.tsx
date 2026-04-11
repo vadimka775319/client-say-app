@@ -15,6 +15,19 @@ import {
   type SiteSettings,
 } from "@/lib/site-settings";
 
+type SitePublicReward = {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  pointsCost: number;
+  totalStock: number;
+  stockLeft: number;
+  startsAt: string;
+  endsAt: string;
+  termsText?: string;
+};
+
 const INDUSTRIES = [
   "Общепит",
   "Ритейл",
@@ -104,6 +117,8 @@ function trackEvent(eventName: string, params: Record<string, string | number | 
 export default function Home() {
   const monthlyPlan = partnerPlans.find((p) => p.id === "monthly");
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
+  /** null = ещё не загрузили с API; [] = в базе нет активных призов */
+  const [siteRewards, setSiteRewards] = useState<SitePublicReward[] | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<HomeAuthRole>("GENERAL");
@@ -138,6 +153,22 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch("/api/site/rewards", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { rewards: [] }))
+      .then((d: { rewards?: SitePublicReward[] }) => {
+        if (cancelled) return;
+        setSiteRewards(Array.isArray(d.rewards) ? d.rewards : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSiteRewards([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     queueMicrotask(() => {
       try {
         const raw = window.localStorage.getItem(SITE_SETTINGS_KEY);
@@ -155,10 +186,15 @@ export default function Home() {
     });
   }, []);
 
+  const rewardCountForLanding = siteRewards === null ? rewards.length : siteRewards.length;
+
   const landingStats = useMemo(
-    () => computeLandingStats(siteSettings, partners.length, users.length, rewards.length),
-    [siteSettings],
+    () => computeLandingStats(siteSettings, partners.length, users.length, rewardCountForLanding),
+    [siteSettings, rewardCountForLanding],
   );
+
+  const prizesForGrid: SitePublicReward[] | typeof rewards =
+    siteRewards === null ? rewards : siteRewards.length > 0 ? siteRewards : rewards;
 
   useEffect(() => {
     if (!pricingRef.current || pricingViewSent.current) return;
@@ -424,12 +460,19 @@ export default function Home() {
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-extrabold text-slate-900 md:text-4xl">Призы за баллы</h2>
               <p className="mt-3 text-slate-600">
-                Партнёры загружают подарки в админке: фото, описание, срок акции и остаток. Пользователь видит витрину и
-                меняет баллы на приз — в точке показывает код подтверждения.
+                Партнёры добавляют призы в кабинете: фото, описание, срок акции и остаток. Ниже — реальные призы из базы
+                (если они есть); иначе показаны демо-примеры.
               </p>
             </div>
             <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {rewards.slice(0, 6).map((reward) => (
+              {siteRewards !== null && siteRewards.length === 0 ? (
+                <p className="col-span-full rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 p-8 text-center text-sm text-slate-600">
+                  Активных призов пока нет. Зайдите в кабинет партнёра и добавьте витрину — блок обновится после сохранения.
+                </p>
+              ) : null}
+              {(siteRewards !== null && siteRewards.length === 0 ? [] : prizesForGrid)
+                .slice(0, 6)
+                .map((reward) => (
                 <article
                   key={reward.id}
                   className="overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-md transition-shadow hover:shadow-lg"
@@ -457,6 +500,12 @@ export default function Home() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-slate-600">{reward.description}</p>
+                    {"termsText" in reward && reward.termsText ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-700">Сроки: </span>
+                        {reward.termsText}
+                      </p>
+                    ) : null}
                     <p className="mt-3 text-xs text-slate-500">
                       Остаток {reward.stockLeft}/{reward.totalStock} · до{" "}
                       {new Date(reward.endsAt).toLocaleDateString("ru-RU")}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCabinetIdleLogout } from "@/app/components/use-cabinet-idle-logout";
 import { BRAND_NAME } from "@/lib/brand";
 
@@ -19,7 +19,25 @@ type CabinetShellProps = {
 export function CabinetShell({ title, subtitle, children }: CabinetShellProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [siteLogoUrl, setSiteLogoUrl] = useState<string | null>(null);
   useCabinetIdleLogout();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/site/public", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { logoUrl?: string } | null) => {
+        if (!d || cancelled) return;
+        const u = typeof d.logoUrl === "string" ? d.logoUrl.trim() : "";
+        setSiteLogoUrl(u.length > 0 ? u : null);
+      })
+      .catch(() => {
+        if (!cancelled) setSiteLogoUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function logout() {
     setBusy(true);
@@ -34,10 +52,18 @@ export function CabinetShell({ title, subtitle, children }: CabinetShellProps) {
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[var(--background)]">
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-[var(--cs-border)] bg-[var(--cs-surface)]/95 shadow-[var(--cs-shadow)] backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-3 md:px-8">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 sm:gap-4">
-            <Link href="/" className="group flex shrink-0 items-center gap-2 no-underline">
+            <Link href="/" className="group flex shrink-0 items-center gap-3 no-underline">
+              {siteLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- data URL и внешние URL из админки
+                <img
+                  src={siteLogoUrl}
+                  alt=""
+                  className="h-9 w-auto max-w-[140px] object-contain md:h-10"
+                />
+              ) : null}
               <span className="font-brand-logo bg-gradient-to-r from-violet-600 to-indigo-500 bg-clip-text text-lg tracking-tight text-transparent transition-opacity group-hover:opacity-90 md:text-xl">
                 {BRAND_NAME}
               </span>
