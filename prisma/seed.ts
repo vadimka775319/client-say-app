@@ -1,5 +1,11 @@
+import path from "path";
+import { config as loadEnv } from "dotenv";
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+
+/** Как в start-prod: до PrismaClient, иначе при `npx tsx prisma/seed.ts` бывает пустой DATABASE_URL. */
+loadEnv({ path: path.join(__dirname, "..", ".env") });
+loadEnv({ path: path.join(__dirname, "..", ".env.production"), override: true });
 
 const prisma = new PrismaClient();
 
